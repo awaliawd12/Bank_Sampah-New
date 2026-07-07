@@ -1,0 +1,496 @@
+import { useState, useMemo } from 'react';
+import {
+  LayoutDashboard, PlusCircle, History, Database,
+  FileCheck, BarChart2, LogOut, Trash2, Calendar,
+  Clock, Package, MapPin, Scale, Info, Menu
+} from 'lucide-react';
+import {
+  BarChart, Bar, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
+} from 'recharts';
+import {
+  KATEGORI_SAMPAH, JENIS_SAMPAH, PENGELOLA_LIST,
+  formatWeight, TODAY
+} from '../lib/mockData';
+
+const PLNLogo = ({ size = 36 }) => {
+  const customLogoUrl = '/Logo.png';
+  if (customLogoUrl) {
+    return <img src={customLogoUrl} alt="Logo Powercycle" style={{ height: size, maxWidth: '100%', objectFit: 'contain' }} />;
+  }
+  return null;
+};
+
+function StatusBadge({ status }) {
+  const cfg = {
+    'Terverifikasi': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
+    'Pending': { bg: 'rgba(245, 158, 11, 0.08)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.2)' },
+    'Ditolak': { bg: 'rgba(239, 68, 68, 0.08)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.2)' },
+    'Lunas': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
+  };
+  const { bg, color, border } = cfg[status] || { bg: 'rgba(100, 116, 139, 0.08)', color: '#475569', border: '1px solid rgba(100, 116, 139, 0.2)' };
+  return (
+    <span style={{ 
+      background: bg, 
+      color, 
+      border,
+      padding: '4px 10px', 
+      borderRadius: '9999px', 
+      fontSize: '0.72rem', 
+      fontWeight: 700, 
+      whiteSpace: 'nowrap', 
+      display: 'inline-block' 
+    }}>
+      {status}
+    </span>
+  );
+}
+
+function StatCard({ title, value, subtext }) {
+  return (
+    <div style={{ 
+      background: 'white', 
+      borderRadius: 20, 
+      padding: '24px', 
+      boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', 
+      border: '1px solid var(--ds-border)' 
+    }}>
+      <p style={{ fontSize: '0.78rem', color: 'var(--ds-text-muted)', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</p>
+      <p style={{ fontSize: '2.1rem', fontWeight: 800, color: 'var(--ds-accent)', margin: '0 0 6px 0', letterSpacing: '-1px' }}>{value}</p>
+      <p style={{ fontSize: '0.8rem', color: 'var(--ds-text-muted)', margin: 0, fontWeight: 500 }}>{subtext}</p>
+    </div>
+  );
+}
+
+export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDeposit, onDeleteDeposit, onAddBuktiBayar, userUnit, username }) {
+  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [selectedBulan, setSelectedBulan] = useState('2026-06');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    date: TODAY, time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    kategori: 'Organik', jenis: '', pengelola: '', berat: ''
+  });
+
+  const myDeposits = useMemo(() => deposits.filter(d => d.user === username), [deposits, username]);
+  const unitBuktiBayar = useMemo(() => buktiBayar.filter(b => !userUnit || b.unit === userUnit), [buktiBayar, userUnit]);
+
+  const todayDeposits = myDeposits.filter(d => d.date === TODAY);
+  const totalWeight = myDeposits.reduce((s, d) => s + d.weight, 0);
+
+  const filteredBukti = useMemo(() => unitBuktiBayar.filter(b => b.month === selectedBulan), [unitBuktiBayar, selectedBulan]);
+
+  const handleInputSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.berat) return;
+    
+    const newDep = {
+      id: 'D' + Date.now(),
+      date: formData.date,
+      time: formData.time,
+      user: username || 'User',
+      client: 'UP3 Jakarta Selatan', 
+      unit: userUnit || 'Wonogiri',
+      category: formData.kategori,
+      jenis: formData.jenis,
+      pengelola: formData.pengelola,
+      weight: parseFloat(formData.berat),
+      status: 'Pending',
+      remarks: ''
+    };
+    onAddDeposit(newDep);
+    alert(`Data Berhasil Disimpan!\n\nNama Pengelola: ${formData.pengelola}\nNilai Timbulan: ${formData.berat} Kg`);
+    setFormData(prev => ({ ...prev, berat: '', jenis: '', pengelola: '' }));
+    setCurrentPage('riwayat');
+  };
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'input', label: 'Input Sampah', icon: PlusCircle },
+    { id: 'riwayat', label: 'Riwayat', icon: History },
+    { id: 'neraca', label: 'Neraca Sampah', icon: Database },
+    { id: 'bukti-bayar', label: 'Bukti Bayar', icon: FileCheck },
+    { id: 'ringkasan', label: 'Ringkasan', icon: BarChart2 },
+  ];
+
+  const renderDashboard = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+        <StatCard title="Input Hari Ini" value={todayDeposits.length} subtext="Total transaksi Anda hari ini" />
+        <StatCard title="Berat Hari Ini" value={formatWeight(todayDeposits.reduce((s, d) => s + d.weight, 0))} subtext="Total berat sampah disetor hari ini" />
+      </div>
+
+      <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Setoran Terbaru Saya</h3>
+          <button onClick={() => setCurrentPage('input')} style={{ padding: '10px 20px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+            onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
+            onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
+          >
+            + Input Baru
+          </button>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Tanggal</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Berat</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {myDeposits.slice(0, 5).map((d, i) => (
+                <tr key={d.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                  <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.date}</td>
+                  <td style={{ padding: '14px 18px' }}>
+                    <span style={{ background: d.category === 'Organik' ? 'rgba(16, 185, 129, 0.08)' : d.category === 'Anorganik' ? 'rgba(8, 145, 178, 0.08)' : 'rgba(245, 158, 11, 0.08)', color: d.category === 'Organik' ? '#047857' : d.category === 'Anorganik' ? '#0891B2' : '#b45309', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 700 }}>
+                      {d.category}
+                    </span>
+                  </td>
+                  <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.jenis}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(d.weight)}</td>
+                  <td style={{ padding: '14px 18px' }}><StatusBadge status={d.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderInput = () => (
+    <div style={{ maxWidth: 700, margin: '0 auto', background: 'white', borderRadius: '1.5rem', padding: '36px 32px', boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid var(--ds-border)', letterSpacing: '-0.5px' }}>Input Data Sampah Baru</h3>
+      
+      <form onSubmit={handleInputSubmit} style={{ display: 'grid', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Calendar size={16} /> Tanggal</label>
+            <input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
+          </div>
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Clock size={16} /> Waktu</label>
+            <input type="time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Package size={16} /> Kategori Sampah</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            {KATEGORI_SAMPAH.map(k => {
+              const isSelected = formData.kategori === k;
+              return (
+                <button key={k} type="button" onClick={() => setFormData({ ...formData, kategori: k })} 
+                  style={{ 
+                    padding: '14px', 
+                    border: `1.5px solid ${isSelected ? 'var(--ds-accent)' : 'var(--ds-border)'}`, 
+                    background: isSelected ? 'rgba(8, 145, 178, 0.05)' : 'white', 
+                    borderRadius: 12, 
+                    cursor: 'pointer', 
+                    fontWeight: 700, 
+                    color: isSelected ? 'var(--ds-accent)' : 'var(--ds-text-muted)',
+                    fontFamily: 'inherit',
+                    transition: 'all 0.2s'
+                  }}>
+                  {k}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div>
+            <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Jenis Sampah</label>
+            <input type="text" value={formData.jenis} onChange={e => setFormData({ ...formData, jenis: e.target.value })} placeholder="Ketik jenis sampah..." required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
+          </div>
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}><MapPin size={16} /> Pengelola</label>
+            <input type="text" value={formData.pengelola} onChange={e => setFormData({ ...formData, pengelola: e.target.value })} placeholder="Ketik nama pengelola..." required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Scale size={16} /> Berat (Kg)</label>
+          <input type="number" step="0.1" value={formData.berat} onChange={e => setFormData({ ...formData, berat: e.target.value })} placeholder="Masukkan berat sampah dalam Kg" required style={{ width: '100%', padding: '12px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '1rem', outline: 'none', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit', background: '#F8FAFC' }} />
+        </div>
+
+        <div style={{ background: '#F1F5F9', padding: 18, borderRadius: 12, display: 'flex', gap: 12, alignItems: 'flex-start', marginTop: 8 }}>
+          <Info size={20} color="var(--ds-text-muted)" style={{ flexShrink: 0, marginTop: 2 }} />
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--ds-text-muted)', lineHeight: 1.5, fontWeight: 500 }}>Data yang diinput akan masuk ke sistem pencatatan Timbulan Sampah dan divalidasi oleh Administrator. Pastikan kategori dan jenis sampah sudah sesuai.</p>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+          <button type="submit" style={{ flex: 1, padding: '14px', background: 'var(--ds-text)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+            onMouseEnter={e => e.target.style.background = 'var(--ds-accent)'}
+            onMouseLeave={e => e.target.style.background = 'var(--ds-text)'}
+          >Simpan Data</button>
+          <button type="button" onClick={() => setFormData({ ...formData, berat: '' })} style={{ padding: '14px 28px', background: 'white', color: 'var(--ds-text-muted)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+            onMouseEnter={e => { e.target.style.borderColor = 'var(--ds-text)'; e.target.style.color = 'var(--ds-text)'; }}
+            onMouseLeave={e => { e.target.style.borderColor = 'var(--ds-border)'; e.target.style.color = 'var(--ds-text-muted)'; }}
+          >Reset</button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderRiwayat = () => (
+    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Riwayat Input Saya</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Waktu</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Pengelola</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Berat</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Status</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700, textAlign: 'right' }}>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {myDeposits.map((d, i) => (
+              <tr key={d.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.date} <span style={{ color: 'var(--ds-text-muted)', fontSize: '0.8rem' }}>{d.time}</span></td>
+                <td style={{ padding: '14px 18px' }}>
+                  <span style={{ background: d.category === 'Organik' ? 'rgba(16, 185, 129, 0.08)' : d.category === 'Anorganik' ? 'rgba(8, 145, 178, 0.08)' : 'rgba(245, 158, 11, 0.08)', color: d.category === 'Organik' ? '#047857' : d.category === 'Anorganik' ? '#0891B2' : '#b45309', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 700 }}>
+                    {d.category}
+                  </span>
+                </td>
+                <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.jenis}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.pengelola}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(d.weight)}</td>
+                <td style={{ padding: '14px 18px' }}><StatusBadge status={d.status} /></td>
+                <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                  {d.status === 'Pending' && (
+                    <button onClick={() => {
+                      if(window.confirm('Hapus data transaksi ini?')) {
+                        onDeleteDeposit(d.id);
+                      }
+                    }} style={{ background: '#FEE2E2', color: '#EF4444', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer', display: 'inline-flex', transition: 'all 0.2s' }}
+                      onMouseEnter={e => e.target.style.background = '#FCA5A5'}
+                      onMouseLeave={e => e.target.style.background = '#FEE2E2'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderNeraca = () => (
+    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Neraca Sampah - Periode {selectedBulan}</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Timbulan (Kg)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Yang Dimanfaatkan (Kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {neraca.filter(n => n.month === selectedBulan).map((n, i) => (
+              <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{Number(n.timbulan).toFixed(1)}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{Number(n.dimanfaatkan).toFixed(1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const handleUploadKwitansi = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newBukti = {
+          id: 'B' + Date.now(),
+          month: selectedBulan,
+          unit: userUnit || 'Wonogiri',
+          no_bukti: `INV-MANUAL-${Date.now()}`,
+          status: 'Pending',
+          img_url: e.target.result
+        };
+        if (onAddBuktiBayar) onAddBuktiBayar(newBukti);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const renderBuktiBayar = () => (
+    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Bulanan</h3>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <label style={{ padding: '10px 20px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s', display: 'inline-block' }}
+            onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
+            onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
+          >
+            + Upload Kwitansi
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadKwitansi} />
+          </label>
+          <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
+            style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit' }}>
+            <option value="2026-06">Juni 2026</option>
+            <option value="2026-07">Juli 2026</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+        {filteredBukti.length === 0 ? (
+          <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.9rem', margin: 0 }}>Tidak ada bukti bayar untuk bulan ini.</p>
+        ) : filteredBukti.map(b => (
+          <div key={b.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 16, overflow: 'hidden', background: 'white', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ds-border)', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ds-text)' }}>{b.no_bukti}</span>
+              <StatusBadge status={b.status} />
+            </div>
+            <div style={{ padding: 16 }}>
+              {b.img_url ? (
+                <div style={{ width: '100%', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--ds-border)' }}>
+                  <img src={b.img_url} alt="Bukti" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                </div>
+              ) : (
+                <div style={{ width: '100%', height: 200, background: '#F1F5F9', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: '0.85rem' }}>Belum ada dokumentasi</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ds-bg)', fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" }}>
+      {sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)}
+          className="sidebar-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(12, 26, 46, 0.4)',
+            zIndex: 45,
+            backdropFilter: 'blur(4px)'
+          }}
+        />
+      )}
+
+      <div className="sidebar-container" style={{
+        width: 260, background: 'var(--ds-dark)', color: 'white', display: 'flex', flexDirection: 'column',
+        position: 'fixed', top: 0, bottom: 0, zIndex: 50, transition: 'left 0.3s ease',
+        boxShadow: '4px 0 30px rgba(0,0,0,0.15)'
+      }}>
+        <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ background: 'white', padding: 6, borderRadius: 8, display: 'flex' }}><PLNLogo size={24} /></div>
+          <div>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, lineHeight: 1.2, letterSpacing: '-0.5px' }}>Powercycle</h1>
+            <p style={{ fontSize: '0.72rem', color: 'var(--ds-accent-light)', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>User Portal • {userUnit || 'Pusat'}</p>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' }}>
+          {navItems.map(item => {
+            const Icon = item.icon;
+            const isActive = currentPage === item.id;
+            return (
+              <button key={item.id} onClick={() => { setCurrentPage(item.id); setSidebarOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                  background: isActive ? 'rgba(8, 145, 178, 0.15)' : 'transparent', border: 'none', borderRadius: 12,
+                  color: isActive ? 'white' : 'rgba(255,255,255,0.65)', cursor: 'pointer', textAlign: 'left',
+                  fontSize: '0.88rem', fontWeight: isActive ? 700 : 500, transition: 'all 0.2s',
+                  fontFamily: 'inherit'
+                }}>
+                <Icon size={18} style={{ color: isActive ? 'var(--ds-accent-light)' : 'currentColor' }} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: '20px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button onClick={onLogout}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', width: '100%',
+              background: 'transparent', border: 'none', borderRadius: 12, color: '#FCA5A5',
+              cursor: 'pointer', textAlign: 'left', fontSize: '0.88rem', fontWeight: 600, transition: 'all 0.2s',
+              fontFamily: 'inherit'
+            }}
+            onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 0.08)'}
+            onMouseLeave={e => e.target.style.background = 'transparent'}
+          >
+            <LogOut size={18} /> Keluar
+          </button>
+        </div>
+      </div>
+
+      <div className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin 0.3s ease' }}>
+        <header style={{ background: 'white', padding: '16px 28px', borderBottom: '1px solid var(--ds-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ds-text)', display: 'none' }}>
+              <Menu size={24} />
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>{navItems.find(n => n.id === currentPage)?.label}</h2>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Hari ini: {new Date(TODAY).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: 'var(--ds-text)', color: 'white', padding: '8px 18px', borderRadius: 999, fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {username || 'Nasabah'}
+            </div>
+          </div>
+        </header>
+
+        <main style={{ padding: 28, flex: 1 }}>
+          {currentPage === 'dashboard' && renderDashboard()}
+          {currentPage === 'input' && renderInput()}
+          {currentPage === 'riwayat' && renderRiwayat()}
+          {currentPage === 'neraca' && renderNeraca()}
+          {currentPage === 'bukti-bayar' && renderBuktiBayar()}
+          {currentPage === 'ringkasan' && (
+            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 40, textAlign: 'center', border: '1px solid var(--ds-border)', boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)' }}>
+              <BarChart2 size={48} color="var(--ds-accent)" style={{ margin: '0 auto 16px' }} />
+              <h3 style={{ margin: '0 0 8px 0', color: 'var(--ds-text)', fontWeight: 800, fontSize: '1.2rem', letterSpacing: '-0.3px' }}>Ringkasan Data</h3>
+              <p style={{ color: 'var(--ds-text-muted)', margin: 0, fontWeight: 500 }}>Total berat: <strong>{formatWeight(totalWeight)} Kg</strong> dari {myDeposits.length} transaksi.</p>
+            </div>
+          )}
+        </main>
+      </div>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .sidebar-container { left: 0; }
+        .main-content { margin-left: 260px; }
+        .sidebar-overlay { display: none !important; }
+        
+        @media (max-width: 1024px) {
+          .sidebar-container { left: ${sidebarOpen ? '0' : '-260px'} !important; }
+          .main-content { margin-left: 0 !important; }
+          .sidebar-toggle { display: block !important; }
+          .sidebar-overlay { display: block !important; }
+        }
+      `}} />
+    </div>
+  );
+}
