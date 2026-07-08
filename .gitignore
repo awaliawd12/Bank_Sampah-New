@@ -3,3 +3,11 @@ node_modules
 .env.local
 .env
 *.log
+
+# Local scripts and data
+*.py
+add_banjarnegara.js
+create_log_table.js
+database_cleanup.js
+import_historical_data.js
+keperluan/
