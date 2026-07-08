@@ -6,10 +6,10 @@ export async function getDbConnection() {
   if (pool) return pool;
 
   const config = {
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_DATABASE || 'bank_sampah',
+    host: (process.env.DB_HOST || 'localhost').trim(),
+    user: (process.env.DB_USER || 'root').trim(),
+    password: (process.env.DB_PASSWORD || '').trim(),
+    database: (process.env.DB_DATABASE || 'bank_sampah').trim(),
     port: parseInt(process.env.DB_PORT || '3306', 10),
     waitForConnections: true,
     connectionLimit: 10,
@@ -28,9 +28,9 @@ export async function getDbConnection() {
     console.log('MySQL Database pool connected successfully.');
     return pool;
   } catch (error) {
-    console.error('MySQL database connection failed. Make sure MySQL is running and DB credentials in .env.local are correct.', error.message);
+    console.error('MySQL database connection failed:', error.message);
     pool = null;
-    throw error;
+    throw new Error(`DB Connection Error: ${error.message}`);
   }
 }
 

@@ -24,8 +24,7 @@ export async function POST(request) {
     }
   } catch (error) {
     return NextResponse.json({ 
-      error: 'Database connection failed. Make sure MySQL is running and db-init.sql has been executed.', 
-      details: error.message 
+      error: error.message 
     }, { status: 500 });
   }
 }
