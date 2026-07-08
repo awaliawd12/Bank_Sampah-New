@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, Trash2, Users, Building2, FileText,
   BarChart2, Activity, Settings, LogOut, Menu,
@@ -10,8 +10,7 @@ import {
   ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts';
 import {
-  mockUsers, mockClients, mockActivityLog,
-  monthlyChartData, formatWeight, formatWeightTon, TODAY,
+  formatWeight, formatWeightTon, TODAY,
   KATEGORI_SAMPAH
 } from '../lib/mockData';
 
@@ -31,6 +30,8 @@ function StatusBadge({ status }) {
     'Aktif': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
     'Non-Aktif': { bg: 'rgba(100, 116, 139, 0.08)', color: '#475569', border: '1px solid rgba(100, 116, 139, 0.2)' },
     'Lunas': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
+    'Menunggu Konfirmasi Admin': { bg: 'rgba(99, 102, 241, 0.08)', color: '#4338CA', border: '1px solid rgba(99, 102, 241, 0.2)' },
+    'Disetujui': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
   };
   const { bg, color, border } = cfg[status] || { bg: 'rgba(100, 116, 139, 0.08)', color: '#475569', border: '1px solid rgba(100, 116, 139, 0.2)' };
   return (
@@ -83,29 +84,98 @@ function StatCard({ title, value, icon: Icon, color, bg }) {
 
 const ITEMS_PER_PAGE = 10;
 
-export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDeleteDeposit, onUpdateStatus, userUnit }) {
+export function AdminDashboard({ deposits, neraca, buktiBayar, inventarisasi = [], rekapProgram = [], users = [], clients = [], onLogout, onDeleteDeposit, onUpdateStatus, onUpdateBuktiStatus, userUnit }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [tablePage, setTablePage] = useState(1);
-  const [selectedBulan, setSelectedBulan] = useState('2026-06');
+  const [selectedBulan, setSelectedBulan] = useState('2026-07');
+  const [selectedTahunHistoris, setSelectedTahunHistoris] = useState('2025');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  
+  // Selection State
+  const [selectedRow, setSelectedRow] = useState(null);
+
+  useEffect(() => {
+    setSelectedRow(null);
+  }, [currentPage, tablePage, dateFilter, categoryFilter, searchQuery, selectedBulan, selectedTahunHistoris]);
+
+  // Edit State
+  const [editingItem, setEditingItem] = useState(null);
+  const [editFormType, setEditFormType] = useState(''); // 'deposit', 'client', 'neraca', 'inventarisasi', 'rekap'
+  const [editFormData, setEditFormData] = useState({});
+
+  const handleEdit = (item, type) => {
+    setEditingItem(item.id);
+    setEditFormType(type);
+    setEditFormData(item);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      let endpoint = '';
+      if (editFormType === 'deposit') endpoint = `/api/deposits/${editingItem}`;
+      if (editFormType === 'client') endpoint = `/api/clients/${editingItem}`;
+      if (editFormType === 'neraca') endpoint = `/api/neraca/${editingItem}`;
+      if (editFormType === 'inventarisasi') endpoint = `/api/inventarisasi/${editingItem}`;
+      if (editFormType === 'rekap') endpoint = `/api/rekap-program/${editingItem}`;
+
+      const res = await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData)
+      });
+      
+      if (res.ok) {
+        alert('Data berhasil diperbarui. Halaman akan dimuat ulang.');
+        window.location.reload();
+      } else {
+        alert('Gagal memperbarui data.');
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan.');
+    }
+  };
+
+  const handleDelete = async (id, type) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus data ini?')) return;
+    try {
+      let endpoint = '';
+      if (type === 'deposit') endpoint = `/api/deposits/${id}`;
+      if (type === 'client') endpoint = `/api/clients/${id}`;
+      if (type === 'neraca') endpoint = `/api/neraca/${id}`;
+      if (type === 'inventarisasi') endpoint = `/api/inventarisasi/${id}`;
+      if (type === 'rekap') endpoint = `/api/rekap-program/${id}`;
+
+      const res = await fetch(endpoint, { method: 'DELETE' });
+      if (res.ok) {
+        alert('Data berhasil dihapus. Halaman akan dimuat ulang.');
+        window.location.reload();
+      } else {
+        alert('Gagal menghapus data.');
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan.');
+    }
+  };
 
   const unitDeposits = useMemo(() => deposits.filter(d => !userUnit || d.unit === userUnit), [deposits, userUnit]);
   const unitBuktiBayar = useMemo(() => buktiBayar.filter(b => !userUnit || b.unit === userUnit), [buktiBayar, userUnit]);
 
   const todayDeposits = useMemo(() => unitDeposits.filter(d => d.date === TODAY), [unitDeposits]);
-  const totalWeight = useMemo(() => unitDeposits.reduce((s, d) => s + d.weight, 0), [unitDeposits]);
-  const organikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Organik').reduce((s, d) => s + d.weight, 0), [unitDeposits]);
-  const anorganikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + d.weight, 0), [unitDeposits]);
-  const residuWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + d.weight, 0), [unitDeposits]);
+  const totalWeight = useMemo(() => unitDeposits.reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
+  const organikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Organik').reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
+  const anorganikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
+  const residuWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
 
   const dailyChartData = useMemo(() => {
     const map = new Map();
     unitDeposits.forEach(d => {
       const e = map.get(d.date) || { Organik: 0, Anorganik: 0, Residu: 0 };
-      e[d.category] += d.weight;
+      e[d.category] += Number(d.weight);
       map.set(d.date, e);
     });
     return Array.from(map.entries())
@@ -119,14 +189,14 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
 
   const pieData = [
     { name: 'Organik', value: +Number(organikWeight).toFixed(1), color: '#10B981' },
-    { name: 'Anorganik', value: '#0891B2', color: '#0891B2' },
+    { name: 'Anorganik', value: +Number(anorganikWeight).toFixed(1), color: '#0891B2' },
     { name: 'Residu', value: +Number(residuWeight).toFixed(1), color: '#F59E0B' },
   ];
 
   const filteredDeposits = useMemo(() => {
     return unitDeposits.filter(d => {
       const q = searchQuery.toLowerCase();
-      if (q && !d.user.toLowerCase().includes(q) && !d.client.toLowerCase().includes(q)) return false;
+      if (q && !d.pengelola.toLowerCase().includes(q)) return false;
       if (dateFilter && d.date !== dateFilter) return false;
       if (categoryFilter && d.category !== categoryFilter) return false;
       return true;
@@ -143,21 +213,21 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'waste-monitoring', label: 'Monitoring Sampah', icon: Trash2 },
-    { id: 'user-data', label: 'Data Pengguna', icon: Users },
-    { id: 'client-data', label: 'Data Pengelola', icon: Building2 },
+    { id: 'pengelola-data', label: 'Data Pengelola', icon: Users },
     { id: 'reports', label: 'Laporan', icon: FileText },
-    { id: 'neraca', label: 'Neraca Sampah', icon: Database },
-    { id: 'graphs', label: 'Grafik', icon: BarChart2 },
-    { id: 'activity-log', label: 'Log Aktivitas', icon: Activity },
-    { id: 'bukti-bayar', label: 'Bukti Bayar', icon: FileCheck },
-    { id: 'settings', label: 'Pengaturan', icon: Settings },
+    { id: 'neraca', label: 'Neraca Sampah Bulanan', icon: Database },
+    { id: 'inventarisasi', label: 'Inventarisasi Historis', icon: FileCheck },
+    { id: 'rekap-program', label: 'Rekap Program Historis', icon: CheckCircle },
+    { id: 'bukti-bayar', label: 'Bukti Bayar', icon: Recycle },
   ];
 
   const pageTitles = {
     dashboard: 'Dashboard', 'waste-monitoring': 'Monitoring Sampah',
-    'user-data': 'Data Pengguna', 'client-data': 'Data Pengelola',
-    reports: 'Laporan', neraca: 'Neraca Sampah', graphs: 'Grafik',
-    'activity-log': 'Log Aktivitas', 'bukti-bayar': 'Bukti Bayar', settings: 'Pengaturan',
+    'pengelola-data': 'Data Pengelola',
+    reports: 'Laporan', neraca: 'Neraca Sampah Bulanan',
+    'bukti-bayar': 'Bukti Bayar',
+    inventarisasi: 'Inventarisasi Sampah Historis (2021-2026)',
+    'rekap-program': 'Rekapitulasi Program Pengelolaan Sampah',
   };
 
   const navigateTo = (page) => {
@@ -196,8 +266,7 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
   const renderDashboard = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-        <StatCard title="Total Pengguna" value={mockUsers.length} icon={Users} color="var(--ds-accent)" bg="rgba(8, 145, 178, 0.08)" />
-        <StatCard title="Total Pengelola" value={mockClients.length} icon={Building2} color="#0891B2" bg="rgba(8, 145, 178, 0.08)" />
+        <StatCard title="Total Unit PLN" value={clients.length} icon={Building2} color="#0891B2" bg="rgba(8, 145, 178, 0.08)" />
         <StatCard title="Input Hari Ini" value={todayDeposits.length} icon={Package} color="#10B981" bg="rgba(16, 185, 129, 0.08)" />
         <StatCard title="Total Berat" value={formatWeight(totalWeight)} icon={Scale} color="#6366F1" bg="rgba(99, 102, 241, 0.08)" />
       </div>
@@ -285,7 +354,7 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 240 }}>
             <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--ds-text-muted)' }} />
-            <input type="text" placeholder="Cari pengguna atau klien..." value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setTablePage(1); }}
+            <input type="text" placeholder="Cari klien..." value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setTablePage(1); }}
               style={{ width: '100%', padding: '11px 14px 11px 40px', border: '1.5px solid var(--ds-border)', borderRadius: 12, fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', color: 'var(--ds-text)' }} />
           </div>
           <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); setTablePage(1); }}
@@ -298,28 +367,39 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+        <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 600 }}>Aksi:</span>
+        <button disabled={!selectedRow} onClick={() => selectedRow && handleEdit(selectedRow, 'deposit')} style={{ padding: '8px 16px', background: selectedRow ? '#F1F5F9' : '#F8FAFC', color: selectedRow ? '#0F172A' : '#94A3B8', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: selectedRow ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>Edit</button>
+        <button disabled={!selectedRow} onClick={() => selectedRow && handleDelete(selectedRow.id, 'deposit')} style={{ padding: '8px 16px', background: selectedRow ? '#FEE2E2' : '#F8FAFC', color: selectedRow ? '#EF4444' : '#94A3B8', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: selectedRow ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>Hapus</button>
+        {selectedRow && selectedRow.status === 'Pending' && onUpdateStatus && (
+          <>
+            <div style={{ width: 1, height: 24, background: 'var(--ds-border)', margin: '0 8px' }} />
+            <button onClick={() => { onUpdateStatus(selectedRow.id, 'Terverifikasi'); setSelectedRow(null); }} style={{ padding: '8px 16px', background: '#D1FAE5', color: '#047857', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Terima</button>
+            <button onClick={() => { onUpdateStatus(selectedRow.id, 'Ditolak'); setSelectedRow(null); }} style={{ padding: '8px 16px', background: '#FEE2E2', color: '#B91C1C', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Tolak</button>
+          </>
+        )}
+      </div>
       <div style={{ overflowX: 'auto', minHeight: 400 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <th style={{ padding: '14px 18px', width: 40 }}></th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Tanggal/Waktu</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Pengguna</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Klien</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Unit</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Pengelola</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Berat</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Status</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {paginatedDeposits.map((d, i) => (
-              <tr key={d.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+              <tr key={d.id} onClick={() => setSelectedRow(selectedRow?.id === d.id ? null : d)} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: selectedRow?.id === d.id ? '#F0F9FF' : (i % 2 === 0 ? 'white' : '#FAFCFD'), cursor: 'pointer', transition: 'background 0.2s' }}>
+                <td style={{ padding: '14px 18px' }}>
+                  <input type="radio" checked={selectedRow?.id === d.id} onChange={() => setSelectedRow(d)} style={{ cursor: 'pointer' }} />
+                </td>
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.date} <span style={{ color: 'var(--ds-text-muted)', fontSize: '0.8rem' }}>{d.time}</span></td>
-                <td style={{ padding: '14px 18px', fontWeight: 600, fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.user}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.client}</td>
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.unit}</td>
                 <td style={{ padding: '14px 18px' }}>
                   <span style={{ background: d.category === 'Organik' ? 'rgba(16, 185, 129, 0.08)' : d.category === 'Anorganik' ? 'rgba(8, 145, 178, 0.08)' : 'rgba(245, 158, 11, 0.08)', color: d.category === 'Organik' ? '#047857' : d.category === 'Anorganik' ? '#0891B2' : '#b45309', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 700 }}>
@@ -330,24 +410,6 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.pengelola}</td>
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{Number(d.weight).toFixed(1)} Kg</td>
                 <td style={{ padding: '14px 18px' }}><StatusBadge status={d.status} /></td>
-                <td style={{ padding: '14px 18px' }}>
-                  {d.status === 'Pending' && onUpdateStatus && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button 
-                        onClick={() => onUpdateStatus(d.id, 'Terverifikasi')}
-                        style={{ background: '#10B981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
-                      >
-                        Terima
-                      </button>
-                      <button 
-                        onClick={() => onUpdateStatus(d.id, 'Ditolak')}
-                        style={{ background: '#EF4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
-                      >
-                        Tolak
-                      </button>
-                    </div>
-                  )}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -362,9 +424,9 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
       if (!acc[d.pengelola]) {
         acc[d.pengelola] = { total: 0, count: 0, Organik: 0, Anorganik: 0, Residu: 0 };
       }
-      acc[d.pengelola].total += d.weight;
+      acc[d.pengelola].total += Number(d.weight);
       acc[d.pengelola].count += 1;
-      acc[d.pengelola][d.category] += d.weight;
+      acc[d.pengelola][d.category] += Number(d.weight);
       return acc;
     }, {});
 
@@ -380,21 +442,21 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
               <Leaf size={22} color="#047857" />
               <p style={{ fontSize: '0.88rem', color: '#047857', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sampah Organik</p>
             </div>
-            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#065F46', margin: 0 }}>{formatWeightTon(grandTotalOrganik)} Ton</h3>
+            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#065F46', margin: 0 }}>{formatWeightTon(grandTotalOrganik)}</h3>
           </div>
           <div style={{ background: 'rgba(8, 145, 178, 0.08)', borderRadius: 20, padding: 24, border: '1px solid rgba(8, 145, 178, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Recycle size={22} color="#0891B2" />
               <p style={{ fontSize: '0.88rem', color: '#0891B2', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sampah Anorganik</p>
             </div>
-            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#0e7490', margin: 0 }}>{formatWeightTon(grandTotalAnorganik)} Ton</h3>
+            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#0e7490', margin: 0 }}>{formatWeightTon(grandTotalAnorganik)}</h3>
           </div>
           <div style={{ background: '#FEF3C7', borderRadius: 20, padding: 24, border: '1px solid rgba(245, 158, 11, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Trash2 size={22} color="#b45309" />
               <p style={{ fontSize: '0.88rem', color: '#b45309', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sampah Residu</p>
             </div>
-            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#92400E', margin: 0 }}>{formatWeightTon(grandTotalResidu)} Ton</h3>
+            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#92400E', margin: 0 }}>{formatWeightTon(grandTotalResidu)}</h3>
           </div>
         </div>
 
@@ -433,7 +495,14 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
 
   const renderNeraca = () => (
     <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Neraca Sampah - Periode {selectedBulan}</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Neraca Sampah Bulanan</h3>
+        <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
+          style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)' }}>
+          <option value="2026-07">Juli 2026</option>
+          <option value="2026-06">Juni 2026</option>
+        </select>
+      </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
@@ -497,9 +566,136 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
                   Belum ada dokumentasi
                 </div>
               )}
+              {(b.status === 'Pending') && onUpdateBuktiStatus && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => onUpdateBuktiStatus(b.id, 'Lunas')}
+                    style={{ flex: 1, padding: '8px 12px', background: '#10B981', color: 'white', border: 'none', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.target.style.background = '#059669'}
+                    onMouseLeave={e => e.target.style.background = '#10B981'}
+                  >Setujui</button>
+                  <button onClick={() => { const reason = prompt('Alasan penolakan:'); if (reason) onUpdateBuktiStatus(b.id, 'Ditolak', reason); }}
+                    style={{ flex: 1, padding: '8px 12px', background: '#EF4444', color: 'white', border: 'none', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.target.style.background = '#DC2626'}
+                    onMouseLeave={e => e.target.style.background = '#EF4444'}
+                  >Tolak</button>
+                </div>
+              )}
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+
+  const renderInventarisasi = () => (
+    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Inventarisasi Sampah Historis</h3>
+        <select value={selectedTahunHistoris} onChange={e => setSelectedTahunHistoris(e.target.value)}
+          style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)' }}>
+          <option value="2026">Tahun 2026</option>
+          <option value="2025">Tahun 2025</option>
+          <option value="2024">Tahun 2024</option>
+          <option value="2023">Tahun 2023</option>
+          <option value="2022">Tahun 2022</option>
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+        <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 600 }}>Aksi:</span>
+        <button disabled={!selectedRow} onClick={() => selectedRow && handleEdit(selectedRow, 'inventarisasi')} style={{ padding: '8px 16px', background: selectedRow ? '#F1F5F9' : '#F8FAFC', color: selectedRow ? '#0F172A' : '#94A3B8', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: selectedRow ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>Edit</button>
+        <button disabled={!selectedRow} onClick={() => selectedRow && handleDelete(selectedRow.id, 'inventarisasi')} style={{ padding: '8px 16px', background: selectedRow ? '#FEE2E2' : '#F8FAFC', color: selectedRow ? '#EF4444' : '#94A3B8', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: selectedRow ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>Hapus</button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <th style={{ padding: '14px 18px', width: 40 }}></th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Timbulan (Ton)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Dimanfaatkan (Ton)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Residu ke TPA (Ton)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {inventarisasi.filter(inv => inv.tahun === selectedTahunHistoris).map((inv, i) => (
+              <tr key={inv.id} onClick={() => setSelectedRow(selectedRow?.id === inv.id ? null : inv)} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: selectedRow?.id === inv.id ? '#F0F9FF' : (i % 2 === 0 ? 'white' : '#FAFCFD'), cursor: 'pointer', transition: 'background 0.2s' }}>
+                <td style={{ padding: '14px 18px' }}>
+                  <input type="radio" checked={selectedRow?.id === inv.id} onChange={() => setSelectedRow(inv)} style={{ cursor: 'pointer' }} />
+                </td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{inv.category}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{inv.jenis}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{Number(inv.timbulan).toFixed(3)}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{Number(inv.dimanfaatkan).toFixed(3)}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#DC2626', fontWeight: 600 }}>{Number(inv.residu_tpa).toFixed(3)}</td>
+              </tr>
+            ))}
+            {inventarisasi.filter(inv => inv.tahun === selectedTahunHistoris).length === 0 && (
+              <tr>
+                <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Belum ada data inventarisasi untuk tahun ini.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderRekapProgram = () => (
+    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Rekapitulasi Program Pengelolaan Sampah</h3>
+        <select value={selectedTahunHistoris} onChange={e => setSelectedTahunHistoris(e.target.value)}
+          style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)' }}>
+          <option value="2026">Tahun 2026</option>
+          <option value="2025">Tahun 2025</option>
+          <option value="2024">Tahun 2024</option>
+          <option value="2023">Tahun 2023</option>
+          <option value="2022">Tahun 2022</option>
+          <option value="2021">Tahun 2021</option>
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+        <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 600 }}>Aksi:</span>
+        <button disabled={!selectedRow} onClick={() => selectedRow && handleEdit(selectedRow, 'rekap')} style={{ padding: '8px 16px', background: selectedRow ? '#F1F5F9' : '#F8FAFC', color: selectedRow ? '#0F172A' : '#94A3B8', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: selectedRow ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>Edit</button>
+        <button disabled={!selectedRow} onClick={() => selectedRow && handleDelete(selectedRow.id, 'rekap')} style={{ padding: '8px 16px', background: selectedRow ? '#FEE2E2' : '#F8FAFC', color: selectedRow ? '#EF4444' : '#94A3B8', border: '1px solid var(--ds-border)', borderRadius: 8, cursor: selectedRow ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>Hapus</button>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <th style={{ padding: '14px 18px', width: 40 }}></th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Nama Program</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kegiatan</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Absolut (Ton)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Anggaran (Juta Rp)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Penghematan (Juta Rp)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rekapProgram.filter(rp => rp.tahun === selectedTahunHistoris).map((rp, i) => (
+              <tr key={rp.id} onClick={() => setSelectedRow(selectedRow?.id === rp.id ? null : rp)} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: selectedRow?.id === rp.id ? '#F0F9FF' : (i % 2 === 0 ? 'white' : '#FAFCFD'), cursor: 'pointer', transition: 'background 0.2s' }}>
+                <td style={{ padding: '14px 18px' }}>
+                  <input type="radio" checked={selectedRow?.id === rp.id} onChange={() => setSelectedRow(rp)} style={{ cursor: 'pointer' }} />
+                </td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{rp.nama_program}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{rp.jenis_sampah}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.85rem' }}>
+                  <span style={{ padding: '4px 8px', borderRadius: '4px', background: rp.jenis_kegiatan === 'Pemanfaatan' ? '#ECFCCB' : '#DBEAFE', color: rp.jenis_kegiatan === 'Pemanfaatan' ? '#4D7C0F' : '#1D4ED8', fontWeight: 600 }}>{rp.jenis_kegiatan}</span>
+                </td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 700 }}>{Number(rp.absolut_ton).toFixed(3)}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{Number(rp.anggaran_juta).toFixed(2)}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#059669', fontWeight: 600 }}>{Number(rp.penghematan_juta).toFixed(3)}</td>
+              </tr>
+            ))}
+            {rekapProgram.filter(rp => rp.tahun === selectedTahunHistoris).length === 0 && (
+              <tr>
+                <td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Belum ada rekapitulasi program untuk tahun ini.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -555,7 +751,7 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
         </div>
 
         <div style={{ padding: '20px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={onLogout}
+          <button onClick={() => setShowLogoutConfirm(true)}
             style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', width: '100%',
               background: 'transparent', border: 'none', borderRadius: 12, color: '#FCA5A5',
@@ -571,7 +767,7 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
       </div>
 
       {/* Main Content */}
-      <div className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin 0.3s ease' }}>
+      <div className="main-content" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin 0.3s ease' }}>
         <header style={{ background: 'white', padding: '16px 28px', borderBottom: '1px solid var(--ds-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ds-text)', display: 'none' }}>
@@ -594,147 +790,95 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, onLogout, onDelet
           {currentPage === 'waste-monitoring' && renderWasteMonitoring()}
           {currentPage === 'reports' && renderLaporan()}
           {currentPage === 'neraca' && renderNeraca()}
+          {currentPage === 'inventarisasi' && renderInventarisasi()}
+          {currentPage === 'rekap-program' && renderRekapProgram()}
           {currentPage === 'bukti-bayar' && renderBuktiBayar()}
 
-          {currentPage === 'user-data' && (
-            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Data Pengguna Sistem</h3>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Nama Lengkap</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Email</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Role</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Unit</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Bergabung</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockUsers.filter(u => !userUnit || u.unit === userUnit).map((u, i) => (
-                      <tr key={u.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{u.name}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{u.email}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{u.role}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{u.unit}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{u.joinDate}</td>
-                        <td style={{ padding: '14px 18px' }}><StatusBadge status={u.status} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
-          {currentPage === 'client-data' && (
+
+          {currentPage === 'pengelola-data' && (
             <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Data Klien / Pengelola</h3>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Data Pengelola</h3>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       <th style={{ padding: '14px 18px', fontWeight: 700 }}>Nama Pengelola</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Alamat</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kontak</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Bergabung</th>
+                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Total Sampah Dikelola (Kg)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mockClients.map((c, i) => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{c.name}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{c.address}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{c.contact}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{c.joinDate}</td>
+                    {Object.entries(deposits.reduce((acc, dep) => {
+                      acc[dep.pengelola] = (acc[dep.pengelola] || 0) + Number(dep.weight);
+                      return acc;
+                    }, {})).map(([pengelola, total], i) => (
+                      <tr key={pengelola} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{pengelola}</td>
+                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{total.toFixed(2)} Kg</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          )}
-
-          {currentPage === 'graphs' && (
-            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, letterSpacing: '-0.3px' }}>Trend Berat Sampah (Tahun 2026)</h3>
-              <div style={{ height: 400 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={monthlyChartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorBeratDS" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0891B2" stopOpacity={0.8} />
-                        <stop offset="95%" stopColor="#0891B2" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="bulan" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--ds-text-muted)' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--ds-text-muted)' }} />
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
-                    <Tooltip contentStyle={{ background: 'var(--ds-dark)', border: 'none', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', color: '#fff' }} formatter={(value) => `${value} Kg`} />
-                    <Area type="monotone" dataKey="berat" stroke="#0891B2" fillOpacity={1} fill="url(#colorBeratDS)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {currentPage === 'activity-log' && (
-            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Log Aktivitas Sistem</h3>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Waktu Kejadian</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Pengguna</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Aktivitas</th>
-                      <th style={{ padding: '14px 18px', fontWeight: 700 }}>Detail Keterangan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockActivityLog.map((log, i) => (
-                      <tr key={log.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
-                        <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{log.timestamp}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{log.user}</td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem' }}>
-                          <span style={{ background: 'rgba(8, 145, 178, 0.08)', color: '#0891B2', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>{log.action}</span>
-                        </td>
-                        <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text-muted)' }}>{log.detail}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {currentPage === 'settings' && (
-            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 32, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)', maxWidth: 600 }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, letterSpacing: '-0.3px' }}>Pengaturan Sistem</h3>
-              <div style={{ display: 'grid', gap: 20 }}>
-                <div>
-                  <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Nama Aplikasi</label>
-                  <input type="text" defaultValue="Powercycle" style={{ width: '100%', padding: '12px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Administrator</label>
-                  <input type="email" defaultValue="admin.mrica@pln.co.id" style={{ width: '100%', padding: '12px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
-                </div>
-
-                <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                  <button onClick={() => alert('Pengaturan Disimpan!')} style={{ padding: '12px 24px', background: 'var(--ds-text)', color: 'white', border: 'none', borderRadius: '9999px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', fontFamily: 'inherit' }}
-                    onMouseEnter={e => e.target.style.background = 'var(--ds-accent)'}
-                    onMouseLeave={e => e.target.style.background = 'var(--ds-text)'}
-                  >
-                    Simpan Perubahan
-                  </button>
-                </div>
               </div>
             </div>
           )}
         </main>
       </div>
+
+      {editingItem && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 500, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Edit Data</h3>
+              <button onClick={() => setEditingItem(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--ds-text-muted)' }}>&times;</button>
+            </div>
+            <form onSubmit={handleEditSubmit} style={{ display: 'grid', gap: 16 }}>
+              {Object.keys(editFormData).filter(k => k !== 'id' && k !== 'user' && k !== 'client' && k !== 'unit' && k !== 'timestamp').map(key => (
+                <div key={key}>
+                  <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'capitalize', letterSpacing: '0.5px' }}>{key.replace('_', ' ')}</label>
+                  <input type={key === 'weight' || key === 'timbulan' || key === 'dimanfaatkan' || key === 'residu_tpa' || key === 'absolut_ton' || key === 'anggaran_juta' || key === 'penghematan_juta' ? 'number' : key === 'date' ? 'date' : 'text'} step="any"
+                    value={editFormData[key] || ''} 
+                    onChange={e => setEditFormData({ ...editFormData, [key]: e.target.value })}
+                    style={{ width: '100%', padding: '12px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} 
+                  />
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <button type="button" onClick={() => setEditingItem(null)} style={{ flex: 1, padding: '14px', background: 'white', color: 'var(--ds-text)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>Batal</button>
+                <button type="submit" style={{ flex: 1, padding: '14px', background: 'var(--ds-text)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}>Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 380, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ width: 64, height: 64, background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <LogOut size={32} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Konfirmasi Logout</h3>
+              <p style={{ margin: '8px 0 0', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Apakah Anda yakin ingin keluar dari akun?</p>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setShowLogoutConfirm(false)} style={{ flex: 1, padding: '14px', background: 'white', color: 'var(--ds-text)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.target.style.background = '#F1F5F9'; }}
+                onMouseLeave={e => { e.target.style.background = 'white'; }}
+              >Batal</button>
+              <button onClick={() => { setShowLogoutConfirm(false); onLogout(); }} style={{ flex: 1, padding: '14px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.target.style.background = '#DC2626'}
+                onMouseLeave={e => e.target.style.background = '#EF4444'}
+              >Logout</button>
+            </div>
+          </div>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+          `}</style>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{
         __html: `

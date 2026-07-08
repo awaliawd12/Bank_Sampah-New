@@ -11,8 +11,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import {
-  initialDeposits, UNIT_LIST, formatWeight, formatWeightTon,
-  monthlyChartData, mockUsers
+  UNIT_LIST, formatWeight, formatWeightTon
 } from '../lib/mockData';
 
 function useCountUp(target, duration = 2000) {
@@ -39,7 +38,7 @@ const PLNLogo = ({ size = 36 }) => {
   return null;
 };
 
-export default function LandingPage() {
+export default function LandingPage({ initialDeposits = [], mockUsers = [] }) {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -54,6 +53,21 @@ export default function LandingPage() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const monthlyChartData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const data = months.map(m => ({ bulan: m, berat: 0 }));
+    initialDeposits.forEach(d => {
+      const date = new Date(d.date);
+      if (date.getFullYear() === new Date().getFullYear()) {
+        const monthIndex = date.getMonth();
+        if (data[monthIndex]) {
+          data[monthIndex].berat += Number(d.weight) || 0;
+        }
+      }
+    });
+    return data;
+  }, [initialDeposits]);
 
   const stats = useMemo(() => {
     const filteredDeposits = activeUnit === 'all'
@@ -70,7 +84,7 @@ export default function LandingPage() {
       : mockUsers.filter(u => u.role === 'User' && u.unit === activeUnit).length;
 
     return { totalWeight, organikWeight, anorganikWeight, residuWeight, totalTransactions, totalUsers };
-  }, [activeUnit]);
+  }, [activeUnit, initialDeposits, mockUsers]);
 
   const unitStats = useMemo(() => {
     return UNIT_LIST.map(unit => {
@@ -80,7 +94,7 @@ export default function LandingPage() {
       const nasabah = mockUsers.filter(u => u.unit === unit && u.role === 'User').length;
       return { unit, totalWeight, totalTransactions, nasabah };
     });
-  }, []);
+  }, [initialDeposits, mockUsers]);
 
   const pieData = [
     { name: 'Organik', value: +Number(stats.organikWeight).toFixed(1), color: '#10B981' },
@@ -127,19 +141,20 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {mobileMenuOpen && (
-          <div className="mobile-menu">
-            <a href="#hero" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Beranda</a>
-            <a href="#tentang" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Tentang</a>
-            <a href="#statistik" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Statistik</a>
-            <a href="#unit" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Unit</a>
-            <a href="#kontak" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Kontak</a>
-            <button className="btn-login mobile" onClick={() => router.push('/login')}>
-              Masuk <ArrowRight size={16} />
-            </button>
-          </div>
-        )}
       </header>
+
+      {mobileMenuOpen && (
+        <div className="mobile-menu">
+          <a href="#hero" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Beranda</a>
+          <a href="#tentang" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Tentang</a>
+          <a href="#statistik" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Statistik</a>
+          <a href="#unit" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Unit</a>
+          <a href="#kontak" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>Kontak</a>
+          <button className="btn-login mobile" onClick={() => router.push('/login')}>
+            Masuk <ArrowRight size={16} />
+          </button>
+        </div>
+      )}
 
       <section id="hero" className="hero-section">
         <div className="hero-bg-effects" aria-hidden="true">

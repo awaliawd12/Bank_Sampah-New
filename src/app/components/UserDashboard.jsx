@@ -8,7 +8,7 @@ import {
   BarChart, Bar, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts';
 import {
-  KATEGORI_SAMPAH, JENIS_SAMPAH, PENGELOLA_LIST,
+  KATEGORI_SAMPAH,
   formatWeight, TODAY
 } from '../lib/mockData';
 
@@ -26,6 +26,8 @@ function StatusBadge({ status }) {
     'Pending': { bg: 'rgba(245, 158, 11, 0.08)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.2)' },
     'Ditolak': { bg: 'rgba(239, 68, 68, 0.08)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.2)' },
     'Lunas': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
+    'Menunggu Konfirmasi Admin': { bg: 'rgba(99, 102, 241, 0.08)', color: '#4338CA', border: '1px solid rgba(99, 102, 241, 0.2)' },
+    'Disetujui': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
   };
   const { bg, color, border } = cfg[status] || { bg: 'rgba(100, 116, 139, 0.08)', color: '#475569', border: '1px solid rgba(100, 116, 139, 0.2)' };
   return (
@@ -65,9 +67,11 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedBulan, setSelectedBulan] = useState('2026-06');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
   const [formData, setFormData] = useState({
-    date: TODAY, time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    date: TODAY, time: new Date().toTimeString().slice(0, 5),
     kategori: 'Organik', jenis: '', pengelola: '', berat: ''
   });
 
@@ -81,14 +85,20 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
 
   const handleInputSubmit = (e) => {
     e.preventDefault();
-    if (!formData.berat) return;
-    
+    if (!formData.berat || !formData.pengelola || !formData.jenis) {
+      alert("Harap lengkapi semua data!");
+      return;
+    }
+    setShowConfirmPopup(true);
+  };
+
+  const handleConfirmSave = () => {
     const newDep = {
       id: 'D' + Date.now(),
       date: formData.date,
       time: formData.time,
       user: username || 'User',
-      client: 'UP3 Jakarta Selatan', 
+      client: '-', 
       unit: userUnit || 'Wonogiri',
       category: formData.kategori,
       jenis: formData.jenis,
@@ -98,7 +108,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
       remarks: ''
     };
     onAddDeposit(newDep);
-    alert(`Data Berhasil Disimpan!\n\nNama Pengelola: ${formData.pengelola}\nNilai Timbulan: ${formData.berat} Kg`);
+    setShowConfirmPopup(false);
     setFormData(prev => ({ ...prev, berat: '', jenis: '', pengelola: '' }));
     setCurrentPage('riwayat');
   };
@@ -166,7 +176,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
       <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid var(--ds-border)', letterSpacing: '-0.5px' }}>Input Data Sampah Baru</h3>
       
       <form onSubmit={handleInputSubmit} style={{ display: 'grid', gap: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="form-grid-2" style={{ gap: 20 }}>
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Calendar size={16} /> Tanggal</label>
             <input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
@@ -179,7 +189,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
 
         <div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Package size={16} /> Kategori Sampah</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div className="form-grid-3" style={{ gap: 12 }}>
             {KATEGORI_SAMPAH.map(k => {
               const isSelected = formData.kategori === k;
               return (
@@ -202,7 +212,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div className="form-grid-2" style={{ gap: 20 }}>
           <div>
             <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Jenis Sampah</label>
             <input type="text" value={formData.jenis} onChange={e => setFormData({ ...formData, jenis: e.target.value })} placeholder="Ketik jenis sampah..." required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
@@ -228,12 +238,60 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             onMouseEnter={e => e.target.style.background = 'var(--ds-accent)'}
             onMouseLeave={e => e.target.style.background = 'var(--ds-text)'}
           >Simpan Data</button>
-          <button type="button" onClick={() => setFormData({ ...formData, berat: '' })} style={{ padding: '14px 28px', background: 'white', color: 'var(--ds-text-muted)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+          <button type="button" onClick={() => setFormData({ ...formData, berat: '', jenis: '', pengelola: '' })} style={{ padding: '14px 28px', background: 'white', color: 'var(--ds-text-muted)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
             onMouseEnter={e => { e.target.style.borderColor = 'var(--ds-text)'; e.target.style.color = 'var(--ds-text)'; }}
             onMouseLeave={e => { e.target.style.borderColor = 'var(--ds-border)'; e.target.style.color = 'var(--ds-text-muted)'; }}
           >Reset</button>
         </div>
       </form>
+
+      {showConfirmPopup && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 420, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ width: 64, height: 64, background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Package size={32} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Konfirmasi Data</h3>
+              <p style={{ margin: '8px 0 0', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Pastikan rincian data sampah sudah benar.</p>
+            </div>
+            
+            <div style={{ background: '#F8FAFC', padding: 20, borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, border: '1px solid var(--ds-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Total Timbulan</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--ds-accent)' }}>{formatWeight(formData.berat)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Pengelola</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)', textAlign: 'right', maxWidth: 160, lineHeight: 1.2 }}>{formData.pengelola}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Kategori / Jenis</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formData.kategori} - {formData.jenis}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Tanggal Setor</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formData.date} {formData.time}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setShowConfirmPopup(false)} style={{ flex: 1, padding: '14px', background: 'white', color: 'var(--ds-text)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.target.style.background = '#F1F5F9'; }}
+                onMouseLeave={e => { e.target.style.background = 'white'; }}
+              >Batal</button>
+              <button onClick={handleConfirmSave} style={{ flex: 1, padding: '14px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
+                onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
+              >Lanjutkan</button>
+            </div>
+          </div>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+          `}</style>
+        </div>
+      )}
     </div>
   );
 
@@ -429,7 +487,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
         </div>
 
         <div style={{ padding: '20px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={onLogout}
+          <button onClick={() => setShowLogoutConfirm(true)}
             style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', width: '100%',
               background: 'transparent', border: 'none', borderRadius: 12, color: '#FCA5A5',
@@ -444,7 +502,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
         </div>
       </div>
 
-      <div className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin 0.3s ease' }}>
+      <div className="main-content" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin 0.3s ease' }}>
         <header style={{ background: 'white', padding: '16px 28px', borderBottom: '1px solid var(--ds-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ds-text)', display: 'none' }}>
@@ -477,6 +535,34 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
           )}
         </main>
       </div>
+
+      {showLogoutConfirm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 380, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ width: 64, height: 64, background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <LogOut size={32} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Konfirmasi Logout</h3>
+              <p style={{ margin: '8px 0 0', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Apakah Anda yakin ingin keluar dari akun?</p>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setShowLogoutConfirm(false)} style={{ flex: 1, padding: '14px', background: 'white', color: 'var(--ds-text)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.target.style.background = '#F1F5F9'; }}
+                onMouseLeave={e => { e.target.style.background = 'white'; }}
+              >Batal</button>
+              <button onClick={() => { setShowLogoutConfirm(false); onLogout(); }} style={{ flex: 1, padding: '14px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.target.style.background = '#DC2626'}
+                onMouseLeave={e => e.target.style.background = '#EF4444'}
+              >Logout</button>
+            </div>
+          </div>
+          <style>{`
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+          `}</style>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{
         __html: `

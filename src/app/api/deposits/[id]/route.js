@@ -1,27 +1,19 @@
 import { NextResponse } from 'next/server';
-import { query } from '../../../lib/db';
+import { getDbConnection } from '../../../lib/db';
 
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
+    const pool = await getDbConnection();
     
     // Check if deposit exists
-    const deposits = await query('SELECT * FROM deposits WHERE id = ?', [id]);
+    const [deposits] = await pool.query('SELECT * FROM deposits WHERE id = ?', [id]);
     if (!deposits || deposits.length === 0) {
       return NextResponse.json({ error: 'Deposit not found' }, { status: 404 });
     }
 
-    const deposit = deposits[0];
-
     // Delete deposit
-    await query('DELETE FROM deposits WHERE id = ?', [id]);
-
-    // Insert log
-    const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    await query(
-      'INSERT INTO activity_log (timestamp, user, action, detail, type) VALUES (?, ?, ?, ?, ?)',
-      [timestamp, deposit.user, 'Hapus Data Sampah', `Hapus transaksi ${id} - ${deposit.weight} kg`, 'delete']
-    );
+    await pool.query('DELETE FROM deposits WHERE id = ?', [id]);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -32,34 +24,36 @@ export async function DELETE(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const { id } = await params;
-    const { status, remarks, adminUser } = await request.json();
+    const body = await request.json();
+    const pool = await getDbConnection();
 
     // Check if deposit exists
-    const deposits = await query('SELECT * FROM deposits WHERE id = ?', [id]);
+    const [deposits] = await pool.query('SELECT * FROM deposits WHERE id = ?', [id]);
     if (!deposits || deposits.length === 0) {
       return NextResponse.json({ error: 'Deposit not found' }, { status: 404 });
     }
 
-    const deposit = deposits[0];
+    const current = deposits[0];
 
-    // Update deposit status
-    await query(
-      'UPDATE deposits SET status = ?, remarks = ? WHERE id = ?',
-      [status, remarks || '', id]
-    );
+    const updatedData = {
+      date: body.date !== undefined ? body.date : current.date,
+      time: body.time !== undefined ? body.time : current.time,
+      category: body.category !== undefined ? body.category : current.category,
+      jenis: body.jenis !== undefined ? body.jenis : current.jenis,
+      pengelola: body.pengelola !== undefined ? body.pengelola : current.pengelola,
+      weight: body.weight !== undefined ? body.weight : current.weight,
+      status: body.status !== undefined ? body.status : current.status,
+      remarks: body.remarks !== undefined ? body.remarks : current.remarks
+    };
 
-    // Insert log for verification
-    const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const logAction = status === 'Terverifikasi' ? 'Verifikasi Data' : 'Tolak Data';
-    const logDetail = `${id} - ${deposit.category} (${deposit.jenis}) ${deposit.weight} kg - Status ${status} ${remarks ? `(${remarks})` : ''}`;
-    
-    await query(
-      'INSERT INTO activity_log (timestamp, user, action, detail, type) VALUES (?, ?, ?, ?, ?)',
-      [timestamp, adminUser || 'Admin', logAction, logDetail, status === 'Terverifikasi' ? 'verify' : 'reject']
+    // Update deposit
+    await pool.query(
+      'UPDATE deposits SET date = ?, time = ?, category = ?, jenis = ?, pengelola = ?, weight = ?, status = ?, remarks = ? WHERE id = ?',
+      [updatedData.date, updatedData.time, updatedData.category, updatedData.jenis, updatedData.pengelola, updatedData.weight, updatedData.status, updatedData.remarks, id]
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update deposit status', details: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to update deposit', details: error.message }, { status: 500 });
   }
 }

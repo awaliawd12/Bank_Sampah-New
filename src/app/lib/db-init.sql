@@ -50,6 +50,29 @@ CREATE TABLE IF NOT EXISTS neraca_sampah (
   dimanfaatkan DECIMAL(10,2) NOT NULL
 );
 
+-- 4a. neraca_sampah_tahunan (Historical Data in Ton)
+CREATE TABLE IF NOT EXISTS neraca_sampah_tahunan (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tahun VARCHAR(4) NOT NULL,
+  category ENUM('Organik', 'Anorganik', 'Residu') NOT NULL,
+  jenis VARCHAR(50) NOT NULL,
+  timbulan DECIMAL(10,5) NOT NULL,
+  dimanfaatkan DECIMAL(10,5) NOT NULL,
+  residu_tpa DECIMAL(10,5) NOT NULL
+);
+
+-- 4b. rekapitulasi_program (Historical Data)
+CREATE TABLE IF NOT EXISTS rekapitulasi_program (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tahun VARCHAR(4) NOT NULL,
+  nama_program VARCHAR(150) NOT NULL,
+  jenis_sampah VARCHAR(100) NOT NULL,
+  jenis_kegiatan ENUM('Pemanfaatan', 'Pengurangan') NOT NULL,
+  absolut_ton DECIMAL(10,5) NOT NULL,
+  anggaran_juta DECIMAL(10,2) NOT NULL,
+  penghematan_juta DECIMAL(10,5) NOT NULL
+);
+
 -- 5. bukti_bayar
 CREATE TABLE IF NOT EXISTS bukti_bayar (
   id VARCHAR(50) PRIMARY KEY,
@@ -81,25 +104,22 @@ INSERT INTO users (id, name, email, password, role, unit, joinDate, status) VALU
 ON DUPLICATE KEY UPDATE name=name;
 
 INSERT INTO clients (id, name, address, contact, joinDate) VALUES
-('C001', 'UP3 Jakarta Selatan', 'Jl. M.H. Thamrin No. 1, Jakarta Pusat', '021-5555001', '2025-01-15'),
-('C002', 'UP3 Jakarta Utara', 'Jl. Ancol Barat No. 5, Jakarta Utara', '021-5555002', '2025-02-10'),
-('C003', 'UP3 Bekasi', 'Jl. Ahmad Yani No. 12, Bekasi', '021-5555003', '2025-01-20'),
-('C004', 'UP3 Tangerang', 'Jl. Sudirman No. 8, Tangerang', '021-5555004', '2025-03-05'),
-('C005', 'UP3 Bogor', 'Jl. Pajajaran No. 22, Bogor', '0251-555005', '2025-02-20')
+('C001', 'PLTA Wonogiri', 'Pokoh Kidul, Wonogiri', '0273-321111', '2021-01-01'),
+('C002', 'PLTA Banjarnegara', 'Banjarnegara', '-', '2021-01-01')
 ON DUPLICATE KEY UPDATE name=name;
 
 INSERT INTO deposits (id, date, time, user, client, unit, category, jenis, pengelola, weight, status, remarks) VALUES
-('D001', '2026-07-02', '08:30', 'aby', 'UP3 Jakarta Selatan', 'Wonogiri', 'Organik', 'Sisa Makanan', 'TPA Winong', 15.5, 'Terverifikasi', ''),
-('D002', '2026-07-02', '09:15', 'test', 'UP3 Jakarta Utara', 'Banjarnegara', 'Anorganik', 'Plastik', 'TPA Winong', 8.2, 'Terverifikasi', ''),
-('D003', '2026-07-02', '10:00', 'hakim', 'UP3 Bekasi', 'Wonogiri', 'Organik', 'Daun', 'TPA Winong', 22.0, 'Pending', ''),
-('D004', '2026-07-01', '08:00', 'aby', 'UP3 Tangerang', 'Wonogiri', 'Anorganik', 'Botol', 'TPA Winong', 12.5, 'Terverifikasi', ''),
-('D005', '2026-07-01', '11:30', 'test', 'UP3 Bogor', 'Banjarnegara', 'Residu', 'Lainnya', 'TPA Winong', 18.0, 'Terverifikasi', ''),
-('D006', '2026-07-01', '14:00', 'hakim', 'UP3 Jakarta Selatan', 'Wonogiri', 'Residu', 'Lainnya', 'TPA Winong', 9.8, 'Ditolak', 'Data tidak lengkap'),
-('D007', '2026-06-30', '08:45', 'aby', 'UP3 Jakarta Utara', 'Wonogiri', 'Organik', 'Sisa Makanan', 'TPA Winong', 25.3, 'Terverifikasi', ''),
-('D008', '2026-06-30', '13:20', 'test', 'UP3 Bekasi', 'Banjarnegara', 'Anorganik', 'Kertas', 'TPA Winong', 14.7, 'Terverifikasi', ''),
-('D009', '2026-06-29', '09:00', 'hakim', 'UP3 Tangerang', 'Wonogiri', 'Organik', 'Daun', 'TPA Winong', 20.0, 'Terverifikasi', ''),
-('D010', '2026-06-29', '10:30', 'aby', 'UP3 Bogor', 'Wonogiri', 'Residu', 'Lainnya', 'TPA Winong', 6.5, 'Terverifikasi', '')
-ON DUPLICATE KEY UPDATE user=user;
+('D001', '2026-07-02', '08:30', 'aby', 'PLTA Wonogiri', 'Wonogiri', 'Organik', 'Sisa Makanan', 'TPA Winong', 15.5, 'Terverifikasi', ''),
+('D002', '2026-07-02', '09:15', 'test', 'PLTA Wonogiri', 'Banjarnegara', 'Anorganik', 'Plastik', 'TPA Winong', 8.2, 'Terverifikasi', ''),
+('D003', '2026-07-02', '10:00', 'hakim', 'PLTA Wonogiri', 'Wonogiri', 'Organik', 'Daun', 'TPA Winong', 22.0, 'Pending', ''),
+('D004', '2026-07-01', '08:00', 'aby', 'PLTA Wonogiri', 'Wonogiri', 'Anorganik', 'Botol', 'TPA Winong', 12.5, 'Terverifikasi', ''),
+('D005', '2026-07-01', '11:30', 'test', 'PLTA Wonogiri', 'Banjarnegara', 'Residu', 'Lainnya', 'TPA Winong', 18.0, 'Terverifikasi', ''),
+('D006', '2026-07-01', '14:00', 'hakim', 'PLTA Wonogiri', 'Wonogiri', 'Residu', 'Lainnya', 'TPA Winong', 9.8, 'Ditolak', 'Data tidak lengkap'),
+('D007', '2026-06-30', '08:45', 'aby', 'PLTA Wonogiri', 'Wonogiri', 'Organik', 'Sisa Makanan', 'TPA Winong', 25.3, 'Terverifikasi', ''),
+('D008', '2026-06-30', '13:20', 'test', 'PLTA Wonogiri', 'Banjarnegara', 'Anorganik', 'Kertas', 'TPA Winong', 14.7, 'Terverifikasi', ''),
+('D009', '2026-06-29', '09:00', 'hakim', 'PLTA Wonogiri', 'Wonogiri', 'Organik', 'Daun', 'TPA Winong', 20.0, 'Terverifikasi', ''),
+('D010', '2026-06-29', '15:10', 'aby', 'PLTA Wonogiri', 'Wonogiri', 'Residu', 'Kaca', 'TPA Winong', 5.5, 'Pending', '')
+ON DUPLICATE KEY UPDATE status=status;
 
 INSERT INTO neraca_sampah (id, month, category, jenis, timbulan, dimanfaatkan) VALUES
 ('N1', '2026-07', 'Organik', 'Sisa Makanan', 40.8, 35.5),
