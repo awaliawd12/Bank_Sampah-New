@@ -16,6 +16,10 @@ export async function getDbConnection() {
     queueLimit: 0
   };
 
+  if (config.host !== 'localhost' && config.host !== '127.0.0.1') {
+    config.ssl = { minVersion: 'TLSv1.2', rejectUnauthorized: true };
+  }
+
   try {
     pool = mysql.createPool(config);
     // Test the pool connection to verify MySQL is running
