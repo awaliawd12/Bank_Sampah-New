@@ -26,6 +26,7 @@ function StatusBadge({ status }) {
   const cfg = {
     'Terverifikasi': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
     'Pending': { bg: 'rgba(245, 158, 11, 0.08)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.2)' },
+    'Menunggu Validasi': { bg: 'rgba(59, 130, 246, 0.08)', color: '#2563EB', border: '1px solid rgba(59, 130, 246, 0.2)' },
     'Ditolak': { bg: 'rgba(239, 68, 68, 0.08)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.2)' },
     'Aktif': { bg: 'rgba(16, 185, 129, 0.08)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.2)' },
     'Non-Aktif': { bg: 'rgba(100, 116, 139, 0.08)', color: '#475569', border: '1px solid rgba(100, 116, 139, 0.2)' },
@@ -84,7 +85,7 @@ function StatCard({ title, value, icon: Icon, color, bg }) {
 
 const ITEMS_PER_PAGE = 10;
 
-export function AdminDashboard({ deposits, neraca, buktiBayar, inventarisasi = [], rekapProgram = [], users = [], clients = [], onLogout, onDeleteDeposit, onUpdateStatus, onUpdateBuktiStatus, userUnit }) {
+export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisasi = [], rekapProgram = [], users = [], clients = [], onLogout, onDeleteDeposit, onUpdateStatus, onUpdateBuktiStatus, userUnit }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -210,10 +211,12 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, inventarisasi = [
   const totalTablePages = Math.ceil(filteredDeposits.length / ITEMS_PER_PAGE);
   const paginatedDeposits = filteredDeposits.slice((tablePage - 1) * ITEMS_PER_PAGE, tablePage * ITEMS_PER_PAGE);
 
-  const sidebarItems = [
+  const sidebarItems = role === 'admin sis' ? [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'pengelola-data', label: 'Manajemen Pengguna & Unit', icon: Users },
+  ] : [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'waste-monitoring', label: 'Monitoring Sampah', icon: Trash2 },
-    { id: 'pengelola-data', label: 'Data Pengelola', icon: Users },
     { id: 'reports', label: 'Laporan', icon: FileText },
     { id: 'neraca', label: 'Neraca Sampah Bulanan', icon: Database },
     { id: 'inventarisasi', label: 'Inventarisasi Historis', icon: FileCheck },
@@ -223,7 +226,7 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, inventarisasi = [
 
   const pageTitles = {
     dashboard: 'Dashboard', 'waste-monitoring': 'Monitoring Sampah',
-    'pengelola-data': 'Data Pengelola',
+    'pengelola-data': 'Manajemen Pengguna & Unit',
     reports: 'Laporan', neraca: 'Neraca Sampah Bulanan',
     'bukti-bayar': 'Bukti Bayar',
     inventarisasi: 'Inventarisasi Sampah Historis (2021-2026)',
@@ -271,46 +274,50 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, inventarisasi = [
         <StatCard title="Total Berat" value={formatWeight(totalWeight)} icon={Scale} color="#6366F1" bg="rgba(99, 102, 241, 0.08)" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-        <StatCard title="Sampah Organik" value={formatWeight(organikWeight)} icon={Database} color="#10B981" bg="rgba(16, 185, 129, 0.05)" />
-        <StatCard title="Sampah Anorganik" value={formatWeight(anorganikWeight)} icon={Database} color="var(--ds-accent)" bg="rgba(8, 145, 178, 0.05)" />
-        <StatCard title="Sampah Residu" value={formatWeight(residuWeight)} icon={Database} color="#F59E0B" bg="rgba(245, 158, 11, 0.05)" />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', lg: '2fr 1fr', gap: 24 }}>
-        <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, letterSpacing: '-0.3px' }}>Setoran Harian – 7 Hari Terakhir</h3>
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ds-text-muted)' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ds-text-muted)' }} />
-                <Tooltip cursor={{ fill: 'rgba(8, 145, 178, 0.02)' }} contentStyle={{ background: 'var(--ds-dark)', border: 'none', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', color: '#fff' }} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
-                <Bar dataKey="Organik" stackId="a" fill="#10B981" radius={[0, 0, 4, 4]} barSize={32} />
-                <Bar dataKey="Anorganik" stackId="a" fill="var(--ds-accent)" />
-                <Bar dataKey="Residu" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {role !== 'admin sis' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            <StatCard title="Sampah Organik" value={formatWeight(organikWeight)} icon={Database} color="#10B981" bg="rgba(16, 185, 129, 0.05)" />
+            <StatCard title="Sampah Anorganik" value={formatWeight(anorganikWeight)} icon={Database} color="var(--ds-accent)" bg="rgba(8, 145, 178, 0.05)" />
+            <StatCard title="Sampah Residu" value={formatWeight(residuWeight)} icon={Database} color="#F59E0B" bg="rgba(245, 158, 11, 0.05)" />
           </div>
-        </div>
 
-        <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, letterSpacing: '-0.3px' }}>Komposisi Sampah</h3>
-          <div style={{ height: 260, position: 'relative' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={65} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
-                  {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: 'var(--ds-dark)', border: 'none', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', color: '#fff' }} formatter={(value) => `${value} Kg`} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', lg: '2fr 1fr', gap: 24 }}>
+            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, letterSpacing: '-0.3px' }}>Setoran Harian – 7 Hari Terakhir</h3>
+              <div style={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dailyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ds-text-muted)' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ds-text-muted)' }} />
+                    <Tooltip cursor={{ fill: 'rgba(8, 145, 178, 0.02)' }} contentStyle={{ background: 'var(--ds-dark)', border: 'none', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', color: '#fff' }} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+                    <Bar dataKey="Organik" stackId="a" fill="#10B981" radius={[0, 0, 4, 4]} barSize={32} />
+                    <Bar dataKey="Anorganik" stackId="a" fill="var(--ds-accent)" />
+                    <Bar dataKey="Residu" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 24, letterSpacing: '-0.3px' }}>Komposisi Sampah</h3>
+              <div style={{ height: 260, position: 'relative' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={65} outerRadius={90} paddingAngle={2} dataKey="value" stroke="none">
+                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: 'var(--ds-dark)', border: 'none', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', color: '#fff' }} formatter={(value) => `${value} Kg`} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
         <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Log Pencatatan Sampah Terbaru</h3>
@@ -726,7 +733,9 @@ export function AdminDashboard({ deposits, neraca, buktiBayar, inventarisasi = [
           <div style={{ background: 'white', padding: 6, borderRadius: 8, display: 'flex' }}><PLNLogo size={28} /></div>
           <div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, lineHeight: 1.2, letterSpacing: '-0.5px' }}>Powercycle</h1>
-            <p style={{ fontSize: '0.72rem', color: 'var(--ds-accent-light)', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Admin Dashboard</p>
+            <p style={{ fontSize: '0.72rem', color: 'var(--ds-accent-light)', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {role ? (role === 'admin sis' ? 'Admin SIS' : 'Admin LLK') : 'Admin Portal'} • {userUnit || 'Pusat'}
+            </p>
           </div>
         </div>
 

@@ -21,17 +21,30 @@ export default function UserPage() {
 
     async function fetchData() {
       try {
-        const [resDep, resNer, resBuk] = await Promise.all([
+        const [resDep, resTemp, resNer, resBuk] = await Promise.all([
           fetch('/api/deposits?user=' + username),
+          fetch('/api/temporary-deposits?user=' + username),
           fetch('/api/neraca'),
           fetch('/api/bukti' + (unit ? `?unit=${unit}` : ''))
         ]);
 
         const dataDep = await resDep.json();
+        const dataTemp = await resTemp.json();
         const dataNer = await resNer.json();
         const dataBuk = await resBuk.json();
 
-        if (dataDep.success) setDeposits(dataDep.deposits);
+        let allDeposits = [];
+        if (dataDep.success) allDeposits = [...allDeposits, ...dataDep.deposits];
+        if (dataTemp.success) allDeposits = [...allDeposits, ...dataTemp.deposits];
+        
+        // Sort combined deposits by date and time descending
+        allDeposits.sort((a, b) => {
+          const dateA = new Date(`${a.date}T${a.time}`);
+          const dateB = new Date(`${b.date}T${b.time}`);
+          return dateB - dateA;
+        });
+
+        setDeposits(allDeposits);
         if (dataNer.success) setNeraca(dataNer.neraca);
         if (dataBuk.success) setBuktiBayar(dataBuk.buktiBayar);
       } catch (err) {
@@ -60,25 +73,30 @@ export default function UserPage() {
 
   const handleAddDeposit = async (deposit) => {
     try {
-      const res = await fetch('/api/deposits', {
+      const res = await fetch('/api/temporary-deposits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(deposit)
       });
       const data = await res.json();
       if (data.success) {
-        setDeposits(prev => [deposit, ...prev]);
+        setDeposits(prev => [{...deposit, id: data.id, status: 'Menunggu Validasi'}, ...prev]);
+        return { success: true, id: data.id };
       } else {
         alert('Gagal menambah setoran: ' + data.error);
+        return { success: false };
       }
     } catch (err) {
       console.error('Add deposit error:', err);
+      return { success: false };
     }
   };
 
-  const handleDeleteDeposit = async (id) => {
+  const handleDeleteDeposit = async (id, status) => {
     try {
-      const res = await fetch(`/api/deposits/${id}`, { method: 'DELETE' });
+      const isTemporary = status === 'Menunggu Validasi' || status === 'Pending';
+      const endpoint = isTemporary ? `/api/temporary-deposits/${id}` : `/api/deposits/${id}`;
+      const res = await fetch(endpoint, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         setDeposits(prev => prev.filter(d => d.id !== id));

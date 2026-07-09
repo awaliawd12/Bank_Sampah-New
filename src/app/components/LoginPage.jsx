@@ -55,7 +55,8 @@ export default function LoginPage() {
     login(determinedRole, unit, username);
     setShowUnitModal(false);
     
-    if (determinedRole === 'admin') router.push('/admin');
+    if (determinedRole === 'admin sis' || determinedRole === 'admin llk') router.push('/admin');
+    else if (determinedRole === 'validator') router.push('/validator/scan');
     else if (determinedRole === 'user') router.push('/user');
   };
 

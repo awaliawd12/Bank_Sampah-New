@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(100) NOT NULL,
   email VARCHAR(150) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
-  role ENUM('Admin', 'User') NOT NULL,
+  role ENUM('Admin SIS', 'Admin LLK', 'Validator', 'User') NOT NULL,
   unit VARCHAR(50) NOT NULL,
   joinDate DATE NOT NULL,
   status ENUM('Aktif', 'Non-Aktif') DEFAULT 'Aktif'
@@ -38,6 +38,23 @@ CREATE TABLE IF NOT EXISTS deposits (
   weight DECIMAL(10,2) NOT NULL,
   status ENUM('Pending', 'Terverifikasi', 'Ditolak') DEFAULT 'Pending',
   remarks TEXT
+);
+
+-- 3a. temporary_deposits (Mock Firebase)
+CREATE TABLE IF NOT EXISTS temporary_deposits (
+  id VARCHAR(50) PRIMARY KEY,
+  date VARCHAR(10) NOT NULL,
+  time VARCHAR(8) NOT NULL,
+  user VARCHAR(100) NOT NULL,
+  client VARCHAR(150) NOT NULL,
+  unit VARCHAR(50) NOT NULL,
+  category ENUM('Organik', 'Anorganik', 'Residu') NOT NULL,
+  jenis VARCHAR(50) NOT NULL,
+  pengelola VARCHAR(100) NOT NULL,
+  weight DECIMAL(10,2) NOT NULL,
+  status ENUM('Menunggu Validasi', 'Ditolak') DEFAULT 'Menunggu Validasi',
+  remarks TEXT,
+  alasan_penolakan TEXT
 );
 
 -- 4. neraca_sampah
@@ -100,7 +117,9 @@ INSERT INTO users (id, name, email, password, role, unit, joinDate, status) VALU
 ('U001', 'aby', 'aby@pln.co.id', 'aby', 'User', 'Wonogiri', '2025-01-10', 'Aktif'),
 ('U002', 'test', 'test@pln.co.id', 'test', 'User', 'Banjarnegara', '2025-01-15', 'Aktif'),
 ('U003', 'hakim', 'hakim@pln.co.id', 'hakim', 'User', 'Wonogiri', '2025-02-01', 'Aktif'),
-('U004', 'admin', 'tri@pln.co.id', 'admin', 'Admin', 'Wonogiri', '2025-01-05', 'Aktif')
+('U004', 'admin_sis', 'sis@pln.co.id', 'admin', 'Admin SIS', 'Pusat', '2025-01-05', 'Aktif'),
+('U005', 'admin_llk', 'llk@pln.co.id', 'admin', 'Admin LLK', 'Pusat', '2025-01-05', 'Aktif'),
+('U006', 'validator', 'validator@pln.co.id', 'validator', 'Validator', 'Wonogiri', '2025-01-05', 'Aktif')
 ON DUPLICATE KEY UPDATE name=name;
 
 INSERT INTO clients (id, name, address, contact, joinDate) VALUES

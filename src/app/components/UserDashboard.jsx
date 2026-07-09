@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import {
   LayoutDashboard, PlusCircle, History, Database,
   FileCheck, BarChart2, LogOut, Trash2, Calendar,
-  Clock, Package, MapPin, Scale, Info, Menu
+  Clock, Package, MapPin, Scale, Info, Menu, X
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   BarChart, Bar, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts';
@@ -69,6 +70,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [generatedQr, setGeneratedQr] = useState(null);
   
   const [formData, setFormData] = useState({
     date: TODAY, time: new Date().toTimeString().slice(0, 5),
@@ -92,9 +94,8 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
     setShowConfirmPopup(true);
   };
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     const newDep = {
-      id: 'D' + Date.now(),
       date: formData.date,
       time: formData.time,
       user: username || 'User',
@@ -104,13 +105,20 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
       jenis: formData.jenis,
       pengelola: formData.pengelola,
       weight: parseFloat(formData.berat),
-      status: 'Pending',
+      status: 'Menunggu Validasi',
       remarks: ''
     };
-    onAddDeposit(newDep);
+    
+    // onAddDeposit now returns a promise
+    const result = await onAddDeposit(newDep);
+    
     setShowConfirmPopup(false);
-    setFormData(prev => ({ ...prev, berat: '', jenis: '', pengelola: '' }));
-    setCurrentPage('riwayat');
+    
+    if (result && result.success) {
+      setGeneratedQr(result.id);
+      setFormData(prev => ({ ...prev, berat: '', jenis: '', pengelola: '' }));
+      // We don't automatically navigate to history, we show the QR instead
+    }
   };
 
   const navItems = [
@@ -245,53 +253,6 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
         </div>
       </form>
 
-      {showConfirmPopup && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: 420, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <div style={{ width: 64, height: 64, background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <Package size={32} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Konfirmasi Data</h3>
-              <p style={{ margin: '8px 0 0', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Pastikan rincian data sampah sudah benar.</p>
-            </div>
-            
-            <div style={{ background: '#F8FAFC', padding: 20, borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, border: '1px solid var(--ds-border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Total Timbulan</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--ds-accent)' }}>{formatWeight(formData.berat)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Pengelola</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)', textAlign: 'right', maxWidth: 160, lineHeight: 1.2 }}>{formData.pengelola}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Kategori / Jenis</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formData.kategori} - {formData.jenis}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Tanggal Setor</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formData.date} {formData.time}</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setShowConfirmPopup(false)} style={{ flex: 1, padding: '14px', background: 'white', color: 'var(--ds-text)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
-                onMouseEnter={e => { e.target.style.background = '#F1F5F9'; }}
-                onMouseLeave={e => { e.target.style.background = 'white'; }}
-              >Batal</button>
-              <button onClick={handleConfirmSave} style={{ flex: 1, padding: '14px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
-                onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
-                onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
-              >Lanjutkan</button>
-            </div>
-          </div>
-          <style>{`
-            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-          `}</style>
-        </div>
-      )}
     </div>
   );
 
@@ -325,17 +286,25 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(d.weight)}</td>
                 <td style={{ padding: '14px 18px' }}><StatusBadge status={d.status} /></td>
                 <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                  {d.status === 'Pending' && (
-                    <button onClick={() => {
-                      if(window.confirm('Hapus data transaksi ini?')) {
-                        onDeleteDeposit(d.id);
-                      }
-                    }} style={{ background: '#FEE2E2', color: '#EF4444', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer', display: 'inline-flex', transition: 'all 0.2s' }}
-                      onMouseEnter={e => e.target.style.background = '#FCA5A5'}
-                      onMouseLeave={e => e.target.style.background = '#FEE2E2'}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  {(d.status === 'Pending' || d.status === 'Menunggu Validasi') && (
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button onClick={() => setGeneratedQr(d.id)} style={{ background: '#E0F2FE', color: '#0284C7', border: 'none', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s' }}
+                        onMouseEnter={e => e.target.style.background = '#BAE6FD'}
+                        onMouseLeave={e => e.target.style.background = '#E0F2FE'}
+                      >
+                        Lihat QR
+                      </button>
+                      <button onClick={() => {
+                        if(window.confirm('Hapus data transaksi ini?')) {
+                          onDeleteDeposit(d.id, d.status);
+                        }
+                      }} style={{ background: '#FEE2E2', color: '#EF4444', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer', display: 'inline-flex', transition: 'all 0.2s' }}
+                        onMouseEnter={e => e.target.style.background = '#FCA5A5'}
+                        onMouseLeave={e => e.target.style.background = '#FEE2E2'}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -561,6 +530,70 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
           `}</style>
+        </div>
+      )}
+
+      {showConfirmPopup && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 420, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ width: 64, height: 64, background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Package size={32} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Konfirmasi Data</h3>
+              <p style={{ margin: '8px 0 0', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Pastikan rincian data sampah sudah benar.</p>
+            </div>
+            
+            <div style={{ background: '#F8FAFC', padding: 20, borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, border: '1px solid var(--ds-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Total Timbulan</span>
+                <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--ds-accent)' }}>{formatWeight(formData.berat)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Pengelola</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)', textAlign: 'right', maxWidth: 160, lineHeight: 1.2 }}>{formData.pengelola}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Kategori / Jenis</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formData.kategori} - {formData.jenis}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Tanggal Setor</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formData.date} {formData.time}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setShowConfirmPopup(false)} style={{ flex: 1, padding: '14px', background: 'white', color: 'var(--ds-text)', border: '1.5px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.target.style.background = '#F1F5F9'; }}
+                onMouseLeave={e => { e.target.style.background = 'white'; }}
+              >Batal</button>
+              <button onClick={handleConfirmSave} style={{ flex: 1, padding: '14px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
+                onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
+              >Lanjutkan</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {generatedQr && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 360, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '1.25rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Tunjukkan QR Code</h3>
+            <p style={{ margin: '0 0 24px', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Silakan tunjukkan QR Code ini kepada Petugas Verifikasi untuk divalidasi.</p>
+            
+            <div style={{ background: 'white', padding: 16, border: '1px solid var(--ds-border)', borderRadius: 16, display: 'inline-block', marginBottom: 24, boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+              <QRCodeSVG value={`${window.location.origin}/validator/verify/${generatedQr}`} size={200} />
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => { setGeneratedQr(null); setCurrentPage('riwayat'); }} style={{ flex: 1, padding: '14px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
+                onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
+              >Selesai</button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -18,15 +18,16 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (role !== 'admin') {
+    if (role !== 'admin sis' && role !== 'admin llk') {
       router.push('/');
       return;
     }
 
     async function fetchData() {
       try {
-        const [resDep, resNer, resBuk, resInv, resRekap, resUsers, resClients] = await Promise.all([
+        const [resDep, resTemp, resNer, resBuk, resInv, resRekap, resUsers, resClients] = await Promise.all([
           fetch('/api/deposits' + (unit ? `?unit=${unit}` : '')),
+          fetch('/api/temporary-deposits' + (unit ? `?unit=${unit}` : '')),
           fetch('/api/neraca'),
           fetch('/api/bukti' + (unit ? `?unit=${unit}` : '')),
           fetch('/api/inventarisasi'),
@@ -36,6 +37,7 @@ export default function AdminPage() {
         ]);
 
         const dataDep = await resDep.json();
+        const dataTemp = await resTemp.json();
         const dataNer = await resNer.json();
         const dataBuk = await resBuk.json();
         const dataInv = await resInv.json();
@@ -43,13 +45,22 @@ export default function AdminPage() {
         const dataUsers = await resUsers.json();
         const dataClients = await resClients.json();
 
-        if (dataDep.success) setDeposits(dataDep.deposits);
+        let allDeposits = [];
+        if (dataDep.success) allDeposits = [...allDeposits, ...dataDep.deposits];
+        if (dataTemp.success) allDeposits = [...allDeposits, ...dataTemp.deposits];
+        
+        allDeposits.sort((a, b) => {
+          const dateA = new Date(`${a.date}T${a.time}`);
+          const dateB = new Date(`${b.date}T${b.time}`);
+          return dateB - dateA;
+        });
+
+        setDeposits(allDeposits);
         if (dataNer.success) setNeraca(dataNer.neraca);
         if (dataBuk.success) setBuktiBayar(dataBuk.buktiBayar);
         if (dataUsers.success) setUsers(dataUsers.users);
         if (dataClients.success) setClients(dataClients.clients);
         
-        // Handling direct arrays from the new APIs instead of { success: true, data: [] }
         if (Array.isArray(dataInv)) setInventarisasi(dataInv);
         if (Array.isArray(dataRekap)) setRekapProgram(dataRekap);
       } catch (err) {
@@ -62,7 +73,7 @@ export default function AdminPage() {
     fetchData();
   }, [role, unit, router]);
 
-  if (role !== 'admin') return null;
+  if (role !== 'admin sis' && role !== 'admin llk') return null;
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--ds-bg)', color: 'var(--ds-text)', fontFamily: 'sans-serif' }}>
@@ -128,6 +139,7 @@ export default function AdminPage() {
 
   return (
     <AdminDashboard 
+      role={role}
       deposits={deposits} 
       neraca={neraca}
       buktiBayar={buktiBayar}
