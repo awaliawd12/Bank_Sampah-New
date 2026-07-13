@@ -3,8 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Recycle, Leaf, Factory, TrendingUp, ArrowRight, BarChart3,
-  Users, Scale, ChevronDown, Menu, X, MapPin, Phone, Mail, ArrowUp,
-  Zap, ShieldCheck, Globe
+  Users, Scale, ChevronDown, Menu, X, MapPin, Phone, Mail, ArrowUp
 } from 'lucide-react';
 import {
   BarChart, Bar, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
@@ -17,7 +16,10 @@ import {
 function useCountUp(target, duration = 2000) {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    if (target === 0) return;
+    if (target === 0) {
+      setCount(0);
+      return;
+    }
     let start = 0;
     const step = target / (duration / 16);
     const timer = setInterval(() => {
@@ -54,10 +56,19 @@ export default function LandingPage({ initialDeposits = [], mockUsers = [] }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // 1. Dapatkan data transaksi yang sudah ter-filter berdasarkan Unit terpilih
+  const currentFilteredDeposits = useMemo(() => {
+    return activeUnit === 'all'
+      ? initialDeposits
+      : initialDeposits.filter(d => d.unit === activeUnit);
+  }, [activeUnit, initialDeposits]);
+
+  // FIX: Grafik bulanan sekarang membaca 'currentFilteredDeposits' agar ikut berubah saat ganti unit
   const monthlyChartData = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const data = months.map(m => ({ bulan: m, berat: 0 }));
-    initialDeposits.forEach(d => {
+    
+    currentFilteredDeposits.forEach(d => {
       const date = new Date(d.date);
       if (date.getFullYear() === new Date().getFullYear()) {
         const monthIndex = date.getMonth();
@@ -67,29 +78,25 @@ export default function LandingPage({ initialDeposits = [], mockUsers = [] }) {
       }
     });
     return data;
-  }, [initialDeposits]);
+  }, [currentFilteredDeposits]);
 
   const stats = useMemo(() => {
-    const filteredDeposits = activeUnit === 'all'
-      ? initialDeposits
-      : initialDeposits.filter(d => d.unit === activeUnit);
-
-    const totalWeight = filteredDeposits.reduce((s, d) => s + d.weight, 0);
-    const organikWeight = filteredDeposits.filter(d => d.category === 'Organik').reduce((s, d) => s + d.weight, 0);
-    const anorganikWeight = filteredDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + d.weight, 0);
-    const residuWeight = filteredDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + d.weight, 0);
-    const totalTransactions = filteredDeposits.length;
+    const totalWeight = currentFilteredDeposits.reduce((s, d) => s + (Number(d.weight) || 0), 0);
+    const organikWeight = currentFilteredDeposits.filter(d => d.category === 'Organik').reduce((s, d) => s + (Number(d.weight) || 0), 0);
+    const anorganikWeight = currentFilteredDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + (Number(d.weight) || 0), 0);
+    const residuWeight = currentFilteredDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + (Number(d.weight) || 0), 0);
+    const totalTransactions = currentFilteredDeposits.length;
     const totalUsers = activeUnit === 'all'
       ? mockUsers.filter(u => u.role === 'User').length
       : mockUsers.filter(u => u.role === 'User' && u.unit === activeUnit).length;
 
     return { totalWeight, organikWeight, anorganikWeight, residuWeight, totalTransactions, totalUsers };
-  }, [activeUnit, initialDeposits, mockUsers]);
+  }, [activeUnit, currentFilteredDeposits, mockUsers]);
 
   const unitStats = useMemo(() => {
     return UNIT_LIST.map(unit => {
       const unitDeposits = initialDeposits.filter(d => d.unit === unit);
-      const totalWeight = unitDeposits.reduce((s, d) => s + d.weight, 0);
+      const totalWeight = unitDeposits.reduce((s, d) => s + (Number(d.weight) || 0), 0);
       const totalTransactions = unitDeposits.length;
       const nasabah = mockUsers.filter(u => u.unit === unit && u.role === 'User').length;
       return { unit, totalWeight, totalTransactions, nasabah };
@@ -140,7 +147,6 @@ export default function LandingPage({ initialDeposits = [], mockUsers = [] }) {
             </button>
           </div>
         </div>
-
       </header>
 
       {mobileMenuOpen && (

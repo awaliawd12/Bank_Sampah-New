@@ -1,8 +1,9 @@
+'use client';
 import { useState, useMemo } from 'react';
 import {
   LayoutDashboard, PlusCircle, History, Database,
   FileCheck, BarChart2, LogOut, Trash2, Calendar,
-  Clock, Package, MapPin, Scale, Info, Menu, X
+  Clock, Package, MapPin, Scale, Info, Menu, X, Upload, Eye
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -13,6 +14,32 @@ import {
   formatWeight, TODAY
 } from '../lib/mockData';
 
+const DAFTAR_PENGELOLA = [
+  'TPA Winong',
+  'TPA Banjarnegara'
+];
+
+const OPSI_JENIS_SAMPAH = {
+  'Organik': ['Sisa Makanan', 'Daun dan Ranting', 'Kulit Buah/Sayur', 'Kompos Murni', 'Lainnya (Organik)'],
+  'Anorganik': ['Plastik PET/Botol', 'Kertas/Kardus', 'Besi/Logam', 'Kaca/Beling', 'Karet/Ban', 'Lainnya (Anorganik)'],
+  'Residu': ['Popok/Pembalut', 'Puntung Rokok', 'Lainnya (Residu)']
+};
+
+const DAFTAR_BULAN = [
+  { id: '01', nama: 'Januari' },
+  { id: '02', nama: 'Februari' },
+  { id: '03', nama: 'Maret' },
+  { id: '04', nama: 'April' },
+  { id: '05', nama: 'Mei' },
+  { id: '06', nama: 'Juni' },
+  { id: '07', nama: 'Juli' },
+  { id: '08', nama: 'Agustus' },
+  { id: '09', nama: 'September' },
+  { id: '10', nama: 'Oktober' },
+  { id: '11', nama: 'November' },
+  { id: '12', nama: 'Desember' }
+];
+
 const PLNLogo = ({ size = 36 }) => {
   const customLogoUrl = '/Logo.png';
   if (customLogoUrl) {
@@ -20,6 +47,29 @@ const PLNLogo = ({ size = 36 }) => {
   }
   return null;
 };
+
+function filterDataBerdasarkanWaktu(dataList, rentangWaktu) {
+  const tanggalHariIni = new Date(TODAY);
+  
+  return dataList.filter(item => {
+    if (!item.date) return false;
+    const tanggalItem = new Date(item.date);
+    
+    if (rentangWaktu === 'hari') {
+      return item.date === TODAY;
+    }
+    if (rentangWaktu === 'minggu') {
+      const selisihWaktu = tanggalHariIni.getTime() - tanggalItem.getTime();
+      const selisihHari = selisihWaktu / (1000 * 3600 * 24);
+      return selisihHari >= 0 && selisihHari <= 7;
+    }
+    if (rentangWaktu === 'bulan') {
+      return tanggalItem.getMonth() === tanggalHariIni.getMonth() && 
+             tanggalItem.getFullYear() === tanggalHariIni.getFullYear();
+    }
+    return true;
+  });
+}
 
 function StatusBadge({ status }) {
   const cfg = {
@@ -38,7 +88,7 @@ function StatusBadge({ status }) {
       border,
       padding: '4px 10px', 
       borderRadius: '9999px', 
-      fontSize: '0.72rem', 
+      fontSize: '0.68rem', 
       fontWeight: 700, 
       whiteSpace: 'nowrap', 
       display: 'inline-block' 
@@ -67,10 +117,15 @@ function StatCard({ title, value, subtext }) {
 export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDeposit, onDeleteDeposit, onAddBuktiBayar, userUnit, username }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedBulan, setSelectedBulan] = useState('2026-06');
+  const [selectedTahun, setSelectedTahun] = useState('2026');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [generatedQr, setGeneratedQr] = useState(null);
+  const [activeKwitansiPopup, setActiveKwitansiPopup] = useState(null);
+  
+  const [dashboardFilter, setDashboardFilter] = useState('hari');
+  const [riwayatFilter, setRiwayatFilter] = useState('semua');
   
   const [formData, setFormData] = useState({
     date: TODAY, time: new Date().toTimeString().slice(0, 5),
@@ -80,10 +135,37 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
   const myDeposits = useMemo(() => deposits.filter(d => d.user === username), [deposits, username]);
   const unitBuktiBayar = useMemo(() => buktiBayar.filter(b => !userUnit || b.unit === userUnit), [buktiBayar, userUnit]);
 
-  const todayDeposits = myDeposits.filter(d => d.date === TODAY);
-  const totalWeight = myDeposits.reduce((s, d) => s + d.weight, 0);
+  const dashboardFilteredDeposits = useMemo(() => {
+    return filterDataBerdasarkanWaktu(myDeposits, dashboardFilter);
+  }, [myDeposits, dashboardFilter]);
 
-  const filteredBukti = useMemo(() => unitBuktiBayar.filter(b => b.month === selectedBulan), [unitBuktiBayar, selectedBulan]);
+  const riwayatFilteredDeposits = useMemo(() => {
+    return filterDataBerdasarkanWaktu(myDeposits, riwayatFilter);
+  }, [myDeposits, riwayatFilter]);
+
+  const totalWeight = useMemo(() => {
+    return myDeposits.reduce((s, d) => s + (Number(d.weight) || 0), 0);
+  }, [myDeposits]);
+
+  const todayDeposits = useMemo(() => {
+    return myDeposits.filter(d => d.date === TODAY);
+  }, [myDeposits]);
+
+  const statWeightValue = useMemo(() => {
+    const total = dashboardFilteredDeposits.reduce((s, d) => s + (Number(d.weight) || 0), 0);
+    return formatWeight(total);
+  }, [dashboardFilteredDeposits]);
+
+  const statSubtextLabel = useMemo(() => {
+    if (dashboardFilter === 'hari') return 'periode hari ini';
+    if (dashboardFilter === 'minggu') return '7 hari terakhir';
+    if (dashboardFilter === 'bulan') return 'periode bulan ini';
+    return 'akumulasi keseluruhan';
+  }, [dashboardFilter]);
+
+  const filteredNeraca = useMemo(() => {
+    return neraca.filter(n => n.month === selectedBulan && (!userUnit || n.unit === userUnit));
+  }, [neraca, selectedBulan, userUnit]);
 
   const handleInputSubmit = (e) => {
     e.preventDefault();
@@ -109,7 +191,6 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
       remarks: ''
     };
     
-    // onAddDeposit now returns a promise
     const result = await onAddDeposit(newDep);
     
     setShowConfirmPopup(false);
@@ -117,7 +198,26 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
     if (result && result.success) {
       setGeneratedQr(result.id);
       setFormData(prev => ({ ...prev, berat: '', jenis: '', pengelola: '' }));
-      // We don't automatically navigate to history, we show the QR instead
+    }
+  };
+
+  // FIX SAKLAR CAKUPAN: Dipastikan nangkring di dalam body komponen operasional utama
+  const handleUploadKwitansiPerBulan = (e, bulanId) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newBukti = {
+          id: 'B' + Date.now(),
+          month: `${selectedTahun}-${bulanId}`,
+          unit: userUnit || 'Wonogiri',
+          no_bukti: `INV-MANUAL-${Date.now()}`,
+          status: 'Pending',
+          img_url: e.target.result
+        };
+        if (onAddBuktiBayar) onAddBuktiBayar(newBukti);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -133,13 +233,24 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
   const renderDashboard = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-        <StatCard title="Input Hari Ini" value={todayDeposits.length} subtext="Total transaksi Anda hari ini" />
-        <StatCard title="Berat Hari Ini" value={formatWeight(todayDeposits.reduce((s, d) => s + d.weight, 0))} subtext="Total berat sampah disetor hari ini" />
+        <StatCard title="Total Transaksi" value={dashboardFilteredDeposits.length} subtext={`Total input ${statSubtextLabel}`} />
+        <StatCard title="Total Berat" value={statWeightValue} subtext={`Total berat disetor ${statSubtextLabel}`} />
       </div>
 
       <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Setoran Terbaru Saya</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Setoran Terbaru Saya</h3>
+            
+            <select value={dashboardFilter} onChange={e => setDashboardFilter(e.target.value)}
+              style={{ padding: '6px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.82rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+              <option value="hari">Hari Ini</option>
+              <option value="minggu">Minggu Ini</option>
+              <option value="bulan">Bulan Ini</option>
+              <option value="semua">Semua Periode</option>
+            </select>
+          </div>
+          
           <button onClick={() => setCurrentPage('input')} style={{ padding: '10px 20px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
             onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
             onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
@@ -147,6 +258,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             + Input Baru
           </button>
         </div>
+        
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
@@ -159,7 +271,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
               </tr>
             </thead>
             <tbody>
-              {myDeposits.slice(0, 5).map((d, i) => (
+              {dashboardFilteredDeposits.slice(0, 5).map((d, i) => (
                 <tr key={d.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
                   <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.date}</td>
                   <td style={{ padding: '14px 18px' }}>
@@ -168,10 +280,15 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
                     </span>
                   </td>
                   <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.jenis}</td>
-                  <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(d.weight)}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(Number(d.weight) || 0)}</td>
                   <td style={{ padding: '14px 18px' }}><StatusBadge status={d.status} /></td>
                 </tr>
               ))}
+              {dashboardFilteredDeposits.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)', fontSize: '0.88rem' }}>Tidak ada transaksi pada periode ini.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -201,7 +318,8 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             {KATEGORI_SAMPAH.map(k => {
               const isSelected = formData.kategori === k;
               return (
-                <button key={k} type="button" onClick={() => setFormData({ ...formData, kategori: k })} 
+                <button key={k} type="button" 
+                  onClick={() => setFormData({ ...formData, kategori: k, jenis: '' })}
                   style={{ 
                     padding: '14px', 
                     border: `1.5px solid ${isSelected ? 'var(--ds-accent)' : 'var(--ds-border)'}`, 
@@ -223,11 +341,24 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
         <div className="form-grid-2" style={{ gap: 20 }}>
           <div>
             <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Jenis Sampah</label>
-            <input type="text" value={formData.jenis} onChange={e => setFormData({ ...formData, jenis: e.target.value })} placeholder="Ketik jenis sampah..." required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
+            <select value={formData.jenis} onChange={e => setFormData({ ...formData, jenis: e.target.value })} required 
+              style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
+              <option value="">-- Pilih Jenis ({formData.kategori}) --</option>
+              {(OPSI_JENIS_SAMPAH[formData.kategori] || []).map(j => (
+                <option key={j} value={j}>{j}</option>
+              ))}
+            </select>
           </div>
+
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}><MapPin size={16} /> Pengelola</label>
-            <input type="text" value={formData.pengelola} onChange={e => setFormData({ ...formData, pengelola: e.target.value })} placeholder="Ketik nama pengelola..." required style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit' }} />
+            <select value={formData.pengelola} onChange={e => setFormData({ ...formData, pengelola: e.target.value })} required
+              style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
+              <option value="">-- Pilih Pengelola --</option>
+              {DAFTAR_PENGELOLA.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -252,13 +383,23 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
           >Reset</button>
         </div>
       </form>
-
     </div>
   );
 
   const renderRiwayat = () => (
     <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Riwayat Input Saya</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Riwayat Input Saya</h3>
+        
+        <select value={riwayatFilter} onChange={e => setRiwayatFilter(e.target.value)}
+          style={{ padding: '6px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.82rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+          <option value="semua">Semua Periode</option>
+          <option value="hari">Hari Ini</option>
+          <option value="minggu">Minggu Ini</option>
+          <option value="bulan">Bulan Ini</option>
+        </select>
+      </div>
+      
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
@@ -273,7 +414,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             </tr>
           </thead>
           <tbody>
-            {myDeposits.map((d, i) => (
+            {riwayatFilteredDeposits.map((d, i) => (
               <tr key={d.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.date} <span style={{ color: 'var(--ds-text-muted)', fontSize: '0.8rem' }}>{d.time}</span></td>
                 <td style={{ padding: '14px 18px' }}>
@@ -283,7 +424,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
                 </td>
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.jenis}</td>
                 <td style={{ padding: '14px 18px', fontSize: '0.85rem', color: 'var(--ds-text)' }}>{d.pengelola}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(d.weight)}</td>
+                <td style={{ padding: '14px 18px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text)' }}>{formatWeight(Number(d.weight) || 0)}</td>
                 <td style={{ padding: '14px 18px' }}><StatusBadge status={d.status} /></td>
                 <td style={{ padding: '14px 18px', textAlign: 'right' }}>
                   {(d.status === 'Pending' || d.status === 'Menunggu Validasi') && (
@@ -309,6 +450,11 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
                 </td>
               </tr>
             ))}
+            {riwayatFilteredDeposits.length === 0 && (
+              <tr>
+                <td colSpan="7" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)', fontSize: '0.88rem' }}>Tidak ada riwayat transaksi pada periode ini.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -317,7 +463,26 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
 
   const renderNeraca = () => (
     <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Neraca Sampah - Periode {selectedBulan}</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>
+            Neraca Sampah - Unit {userUnit || 'Semua Unit'}
+          </h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>
+            Menampilkan data timbulan dan pemanfaatan sampah sesuai periode
+          </p>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ds-text-muted)' }}>Periode:</label>
+          <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
+            style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
+            <option value="2026-06">Juni 2026</option>
+            <option value="2026-07">Juli 2026</option>
+          </select>
+        </div>
+      </div>
+
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
@@ -329,79 +494,77 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             </tr>
           </thead>
           <tbody>
-            {neraca.filter(n => n.month === selectedBulan).map((n, i) => (
-              <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
-                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{Number(n.timbulan).toFixed(1)}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{Number(n.dimanfaatkan).toFixed(1)}</td>
+            {filteredNeraca.length === 0 ? (
+              <tr>
+                <td colSpan="4" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>
+                  Tidak ada data neraca sampah untuk unit dan periode ini.
+                </td>
               </tr>
-            ))}
+            ) : (
+              filteredNeraca.map((n, i) => (
+                <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{Number(n.timbulan).toFixed(1)}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{Number(n.dimanfaatkan).toFixed(1)}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
     </div>
   );
 
-  const handleUploadKwitansi = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const newBukti = {
-          id: 'B' + Date.now(),
-          month: selectedBulan,
-          unit: userUnit || 'Wonogiri',
-          no_bukti: `INV-MANUAL-${Date.now()}`,
-          status: 'Pending',
-          img_url: e.target.result
-        };
-        if (onAddBuktiBayar) onAddBuktiBayar(newBukti);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const renderBuktiBayar = () => (
     <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Bulanan</h3>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <label style={{ padding: '10px 20px', background: 'var(--ds-accent)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s', display: 'inline-block' }}
-            onMouseEnter={e => e.target.style.background = 'var(--ds-accent-light)'}
-            onMouseLeave={e => e.target.style.background = 'var(--ds-accent)'}
-          >
-            + Upload Kwitansi
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadKwitansi} />
-          </label>
-          <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
-            style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit' }}>
-            <option value="2026-06">Juni 2026</option>
-            <option value="2026-07">Juli 2026</option>
-          </select>
+        <div>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Tahunan</h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>Klik tombol aksi untuk mengelola kwitansi bulanan</p>
         </div>
+        
+        <select value={selectedTahun} onChange={e => setSelectedTahun(e.target.value)}
+          style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
+          <option value="2026">Tahun 2026</option>
+          <option value="2025">Tahun 2025</option>
+        </select>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-        {filteredBukti.length === 0 ? (
-          <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.9rem', margin: 0 }}>Tidak ada bukti bayar untuk bulan ini.</p>
-        ) : filteredBukti.map(b => (
-          <div key={b.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 16, overflow: 'hidden', background: 'white', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ds-border)', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ds-text)' }}>{b.no_bukti}</span>
-              <StatusBadge status={b.status} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+        {DAFTAR_BULAN.map(bulan => {
+          const targetKey = `${selectedTahun}-${bulan.id}`;
+          const b = unitBuktiBayar.find(item => item.month === targetKey);
+
+          return (
+            <div key={bulan.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 12, padding: '14px', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.01)', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--ds-text)', display: 'block', marginBottom: 4 }}>{bulan.nama}</span>
+                {b ? <StatusBadge status={b.status} /> : <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Belum Ada Data</span>}
+              </div>
+              
+              <div style={{ marginTop: 4 }}>
+                {b && b.img_url ? (
+                  <button onClick={() => setActiveKwitansiPopup(b)} 
+                    style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#E0F2FE', color: '#0284C7', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.target.style.background = '#BAE6FD'}
+                    onMouseLeave={e => e.target.style.background = '#E0F2FE'}
+                  >
+                    <Eye size={12} /> Lihat Kwitansi
+                  </button>
+                ) : (
+                  <label style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#F1F5F9', color: 'var(--ds-text)', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s', border: '1px solid var(--ds-border)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
+                  >
+                    <Upload size={12} /> Upload
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleUploadKwitansiPerBulan(e, bulan.id)} />
+                  </label>
+                )}
+              </div>
             </div>
-            <div style={{ padding: 16 }}>
-              {b.img_url ? (
-                <div style={{ width: '100%', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--ds-border)' }}>
-                  <img src={b.img_url} alt="Bukti" style={{ width: '100%', height: 'auto', display: 'block' }} />
-                </div>
-              ) : (
-                <div style={{ width: '100%', height: 200, background: '#F1F5F9', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: '0.85rem' }}>Belum ada dokumentasi</div>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -454,21 +617,6 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             );
           })}
         </div>
-
-        <div style={{ padding: '20px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={() => setShowLogoutConfirm(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', width: '100%',
-              background: 'transparent', border: 'none', borderRadius: 12, color: '#FCA5A5',
-              cursor: 'pointer', textAlign: 'left', fontSize: '0.88rem', fontWeight: 600, transition: 'all 0.2s',
-              fontFamily: 'inherit'
-            }}
-            onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 0.08)'}
-            onMouseLeave={e => e.target.style.background = 'transparent'}
-          >
-            <LogOut size={18} /> Keluar
-          </button>
-        </div>
       </div>
 
       <div className="main-content" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin 0.3s ease' }}>
@@ -482,10 +630,24 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Hari ini: {new Date(TODAY).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ background: 'var(--ds-text)', color: 'white', padding: '8px 18px', borderRadius: 999, fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               {username || 'Nasabah'}
             </div>
+            
+            <button onClick={() => setShowLogoutConfirm(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+                background: '#FEE2E2', color: '#EF4444', border: 'none', borderRadius: '9999px',
+                cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, transition: 'all 0.2s',
+                fontFamily: 'inherit'
+              }}
+              onMouseEnter={e => e.target.style.background = '#FCA5A5'}
+              onMouseLeave={e => e.target.style.background = '#FEE2E2'}
+            >
+              <LogOut size={16} /> Keluar
+            </button>
           </div>
         </header>
 
@@ -505,9 +667,31 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
         </main>
       </div>
 
-      {showLogoutConfirm && (
+      {activeKwitansiPopup && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: 380, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 440, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Detail Dokumentasi Kwitansi</h3>
+              <button onClick={() => setActiveKwitansiPopup(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--ds-text-muted)', fontWeight: 'bold' }}>&times;</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>
+                No. Bukti: <strong style={{ fontFamily: 'monospace', color: 'var(--ds-text)' }}>{activeKwitansiPopup.no_bukti}</strong>
+              </div>
+              <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--ds-border)', background: '#F8FAFC', padding: 8 }}>
+                <img src={activeKwitansiPopup.img_url} alt="Kwitansi Pembayaran" style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 350, objectFit: 'contain' }} />
+              </div>
+            </div>
+            <button onClick={() => setActiveKwitansiPopup(null)} style={{ width: '100%', padding: '12px', background: 'var(--ds-text)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Tutup Kembali
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 380, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ width: 64, height: 64, background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <LogOut size={32} />
@@ -526,16 +710,12 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
               >Logout</button>
             </div>
           </div>
-          <style>{`
-            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-          `}</style>
         </div>
       )}
 
       {showConfirmPopup && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: 420, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 420, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ width: 64, height: 64, background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <Package size={32} />

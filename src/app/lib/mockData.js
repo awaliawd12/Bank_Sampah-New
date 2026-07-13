@@ -1,5 +1,10 @@
-export const TODAY = '2026-07-02';
-export const CURRENT_MONTH = '2026-07';
+const now = new Date();
+
+export const TODAY =
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+export const CURRENT_MONTH =
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
 export const UNIT_LIST = [
   'Wonogiri',

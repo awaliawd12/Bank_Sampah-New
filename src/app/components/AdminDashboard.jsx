@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Trash2, Users, Building2, FileText,
   BarChart2, Activity, Settings, LogOut, Menu,
   Search, Package, Scale, ChevronLeft, ChevronRight,
-  Database, FileCheck, CheckCircle, Leaf, Recycle
+  Database, FileCheck, CheckCircle, Leaf, Recycle, Eye, Upload
 } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
@@ -14,6 +14,21 @@ import {
   KATEGORI_SAMPAH
 } from '../lib/mockData';
 
+const DAFTAR_BULAN = [
+  { id: '01', nama: 'Januari' },
+  { id: '02', nama: 'Februari' },
+  { id: '03', nama: 'Maret' },
+  { id: '04', nama: 'April' },
+  { id: '05', nama: 'Mei' },
+  { id: '06', nama: 'Juni' },
+  { id: '07', nama: 'Juli' },
+  { id: '08', nama: 'Agustus' },
+  { id: '09', nama: 'September' },
+  { id: '10', nama: 'Oktober' },
+  { id: '11', nama: 'November' },
+  { id: '12', nama: 'Desember' }
+];
+
 const PLNLogo = ({ size = 36 }) => {
   const customLogoUrl = '/Logo.png';
   if (customLogoUrl) {
@@ -21,6 +36,29 @@ const PLNLogo = ({ size = 36 }) => {
   }
   return null;
 };
+
+function filterDataBerdasarkanWaktu(dataList, rentangWaktu) {
+  const tanggalHariIni = new Date(TODAY);
+  
+  return dataList.filter(item => {
+    if (!item.date) return false;
+    const tanggalItem = new Date(item.date);
+    
+    if (rentangWaktu === 'hari') {
+      return item.date === TODAY;
+    }
+    if (rentangWaktu === 'minggu') {
+      const selisihWaktu = tanggalHariIni.getTime() - tanggalItem.getTime();
+      const selisihHari = selisihWaktu / (1000 * 3600 * 24);
+      return selisihHari >= 0 && selisihHari <= 7;
+    }
+    if (rentangWaktu === 'bulan') {
+      return tanggalItem.getMonth() === tanggalHariIni.getMonth() && 
+             tanggalItem.getFullYear() === tanggalHariIni.getFullYear();
+    }
+    return true; 
+  });
+}
 
 function StatusBadge({ status }) {
   const cfg = {
@@ -96,16 +134,18 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   const [selectedTahunHistoris, setSelectedTahunHistoris] = useState('2025');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
-  // Selection State
+  const [laporanFilter, setLaporanFilter] = useState('semua');
+  const [activeKwitansiPopup, setActiveKwitansiPopup] = useState(null);
+  const [selectedTahunBukti, setSelectedTahunBukti] = useState('2026');
+  
   const [selectedRow, setSelectedRow] = useState(null);
 
   useEffect(() => {
     setSelectedRow(null);
   }, [currentPage, tablePage, dateFilter, categoryFilter, searchQuery, selectedBulan, selectedTahunHistoris]);
 
-  // Edit State
   const [editingItem, setEditingItem] = useState(null);
-  const [editFormType, setEditFormType] = useState(''); // 'deposit', 'client', 'neraca', 'inventarisasi', 'rekap'
+  const [editFormType, setEditFormType] = useState('');
   const [editFormData, setEditFormData] = useState({});
 
   const handleEdit = (item, type) => {
@@ -167,25 +207,38 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   const unitBuktiBayar = useMemo(() => buktiBayar.filter(b => !userUnit || b.unit === userUnit), [buktiBayar, userUnit]);
 
   const todayDeposits = useMemo(() => unitDeposits.filter(d => d.date === TODAY), [unitDeposits]);
-  const totalWeight = useMemo(() => unitDeposits.reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
-  const organikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Organik').reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
-  const anorganikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
-  const residuWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + Number(d.weight), 0), [unitDeposits]);
+  const totalWeight = useMemo(() => unitDeposits.reduce((s, d) => s + (Number(d.weight) || 0), 0), [unitDeposits]);
+  const organikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Organik').reduce((s, d) => s + (Number(d.weight) || 0), 0), [unitDeposits]);
+  const anorganikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + (Number(d.weight) || 0), 0), [unitDeposits]);
+  const residuWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + (Number(d.weight) || 0), 0), [unitDeposits]);
 
+  // PERBAIKAN: Membuat rentang 7 hari kalender asli mundur berturut-turut dari TODAY
   const dailyChartData = useMemo(() => {
-    const map = new Map();
-    unitDeposits.forEach(d => {
-      const e = map.get(d.date) || { Organik: 0, Anorganik: 0, Residu: 0 };
-      e[d.category] += Number(d.weight);
-      map.set(d.date, e);
-    });
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-7)
-      .map(([date, data]) => ({
-        date: new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
-        ...data
-      }));
+    const dataGrafik = [];
+    const basisTanggal = new Date(TODAY);
+
+    // Iterasi mundur 7 hari kalender berturut-turut
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(basisTanggal);
+      d.setDate(basisTanggal.getDate() - i);
+      
+      const stringKeyTanggal = d.toISOString().split('T')[0];
+      const labelFormatIndo = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+
+      // Ambil seluruh timbulan transaksi di tanggal tersebut
+      const transaksiHariIni = unitDeposits.filter(dep => dep.date === stringKeyTanggal);
+      const beratOrganik = transaksiHariIni.filter(dep => dep.category === 'Organik').reduce((s, dep) => s + (Number(dep.weight) || 0), 0);
+      const beratAnorganik = transaksiHariIni.filter(dep => dep.category === 'Anorganik').reduce((s, dep) => s + (Number(dep.weight) || 0), 0);
+      const beratResidu = transaksiHariIni.filter(dep => dep.category === 'Residu').reduce((s, dep) => s + (Number(dep.weight) || 0), 0);
+
+      dataGrafik.push({
+        date: labelFormatIndo,
+        Organik: Number(beratOrganik.toFixed(1)),
+        Anorganik: Number(beratAnorganik.toFixed(1)),
+        Residu: Number(beratResidu.toFixed(1))
+      });
+    }
+    return dataGrafik;
   }, [unitDeposits]);
 
   const pieData = [
@@ -204,12 +257,13 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
     });
   }, [unitDeposits, searchQuery, dateFilter, categoryFilter]);
 
-  const filteredBukti = useMemo(() => {
-    return unitBuktiBayar.filter(b => b.month === selectedBulan);
-  }, [unitBuktiBayar, selectedBulan]);
+  const totalTablePages = useMemo(() => {
+    return Math.ceil(filteredDeposits.length / ITEMS_PER_PAGE);
+  }, [filteredDeposits]);
 
-  const totalTablePages = Math.ceil(filteredDeposits.length / ITEMS_PER_PAGE);
-  const paginatedDeposits = filteredDeposits.slice((tablePage - 1) * ITEMS_PER_PAGE, tablePage * ITEMS_PER_PAGE);
+  const paginatedDeposits = useMemo(() => {
+    return filteredDeposits.slice((tablePage - 1) * ITEMS_PER_PAGE, tablePage * ITEMS_PER_PAGE);
+  }, [filteredDeposits, tablePage]);
 
   const sidebarItems = role === 'admin sis' ? [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -427,13 +481,16 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   );
 
   const renderLaporan = () => {
-    const grouped = unitDeposits.reduce((acc, d) => {
+    const filteredLaporanDeposits = filterDataBerdasarkanWaktu(unitDeposits, laporanFilter);
+
+    // 1. Pengelompokan Data Per Pengelola
+    const grouped = filteredLaporanDeposits.reduce((acc, d) => {
       if (!acc[d.pengelola]) {
         acc[d.pengelola] = { total: 0, count: 0, Organik: 0, Anorganik: 0, Residu: 0 };
       }
-      acc[d.pengelola].total += Number(d.weight);
+      acc[d.pengelola].total += (Number(d.weight) || 0);
       acc[d.pengelola].count += 1;
-      acc[d.pengelola][d.category] += Number(d.weight);
+      acc[d.pengelola][d.category] += (Number(d.weight) || 0);
       return acc;
     }, {});
 
@@ -441,32 +498,92 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
     const grandTotalAnorganik = Object.values(grouped).reduce((s, d) => s + d.Anorganik, 0);
     const grandTotalResidu = Object.values(grouped).reduce((s, d) => s + d.Residu, 0);
 
+    // 2. Pembuatan Data Kronologis Untuk Grafik Tren Laporan
+    const trendDataMap = new Map();
+    filteredLaporanDeposits.forEach(d => {
+      const entri = trendDataMap.get(d.date) || { date: d.date, Organik: 0, Anorganik: 0, Residu: 0 };
+      entri[d.category] += (Number(d.weight) || 0);
+      trendDataMap.set(d.date, entri);
+    });
+
+    const reportTrendChartData = Array.from(trendDataMap.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(item => ({
+        ...item,
+        // Format label sumbu X agar lebih rapi dibaca
+        labelTanggal: new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })
+      }));
+
+    const subtextLabel = laporanFilter === 'hari' ? 'Hari Ini' : laporanFilter === 'minggu' ? 'Minggu Ini' : laporanFilter === 'bulan' ? 'Bulan Ini' : 'Semua';
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* Panel Filter Dropdown Laporan */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', background: 'white', padding: '12px 20px', borderRadius: 12, border: '1px solid var(--ds-border)', alignItems: 'center', gap: 12 }}>
+          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ds-text-muted)' }}>Filter Waktu Laporan:</label>
+          <select value={laporanFilter} onChange={e => setLaporanFilter(e.target.value)}
+            style={{ padding: '6px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.82rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+            <option value="semua">Semua Periode</option>
+            <option value="hari">Hari Ini</option>
+            <option value="minggu">Minggu Ini</option>
+            <option value="bulan">Bulan Ini</option>
+          </select>
+        </div>
+
+        {/* Top Stat Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
           <div style={{ background: '#D1FAE5', borderRadius: 20, padding: 24, border: '1px solid rgba(16, 185, 129, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Leaf size={22} color="#047857" />
-              <p style={{ fontSize: '0.88rem', color: '#047857', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sampah Organik</p>
+              <p style={{ fontSize: '0.88rem', color: '#047857', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Organik ({subtextLabel})</p>
             </div>
             <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#065F46', margin: 0 }}>{formatWeightTon(grandTotalOrganik)}</h3>
           </div>
           <div style={{ background: 'rgba(8, 145, 178, 0.08)', borderRadius: 20, padding: 24, border: '1px solid rgba(8, 145, 178, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Recycle size={22} color="#0891B2" />
-              <p style={{ fontSize: '0.88rem', color: '#0891B2', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sampah Anorganik</p>
+              <p style={{ fontSize: '0.88rem', color: '#0891B2', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Anorganik ({subtextLabel})</p>
             </div>
             <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#0e7490', margin: 0 }}>{formatWeightTon(grandTotalAnorganik)}</h3>
           </div>
           <div style={{ background: '#FEF3C7', borderRadius: 20, padding: 24, border: '1px solid rgba(245, 158, 11, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Trash2 size={22} color="#b45309" />
-              <p style={{ fontSize: '0.88rem', color: '#b45309', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Sampah Residu</p>
+              <p style={{ fontSize: '0.88rem', color: '#b45309', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Residu ({subtextLabel})</p>
             </div>
             <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#92400E', margin: 0 }}>{formatWeightTon(grandTotalResidu)}</h3>
           </div>
         </div>
 
+        {/* PERBAIKAN: Penambahan Grafik Tren Baru di Halaman Laporan */}
+        <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Grafik Tren Volume Timbulan Sampah ({subtextLabel})</h3>
+          <div style={{ height: 280 }}>
+            {reportTrendChartData.length === 0 ? (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>Tidak ada data aktivitas untuk membuat kurva tren.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={reportTrendChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorOrganik" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10B981" stopOpacity={0.2}/><stop offset="95%" stopColor="#10B981" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorAnorganik" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0891B2" stopOpacity={0.2}/><stop offset="95%" stopColor="#0891B2" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorResidu" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#F59E0B" stopOpacity={0.2}/><stop offset="95%" stopColor="#F59E0B" stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
+                  <XAxis dataKey="labelTanggal" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ds-text-muted)' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--ds-text-muted)' }} />
+                  <Tooltip contentStyle={{ background: 'var(--ds-dark)', border: 'none', borderRadius: 12, color: '#fff' }} formatter={(val) => `${val} Kg`} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+                  <Area type="monotone" dataKey="Organik" stroke="#10B981" fillOpacity={1} fill="url(#colorOrganik)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="Anorganik" stroke="#0891B2" fillOpacity={1} fill="url(#colorAnorganik)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="Residu" stroke="#F59E0B" fillOpacity={1} fill="url(#colorResidu)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Tabel Pengelola Rincian */}
         <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Rincian Per Unit / Pengelola</h3>
           <div style={{ overflowX: 'auto' }}>
@@ -492,6 +609,11 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
                     <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 800, color: 'var(--ds-text)' }}>{formatWeightTon(data.total)}</td>
                   </tr>
                 ))}
+                {Object.keys(grouped).length === 0 && (
+                  <tr>
+                    <td colSpan="6" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Tidak ada data laporan untuk rentang waktu ini.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -500,96 +622,116 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
     );
   };
 
-  const renderNeraca = () => (
-    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Neraca Sampah Bulanan</h3>
-        <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
-          style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)' }}>
-          <option value="2026-07">Juli 2026</option>
-          <option value="2026-06">Juni 2026</option>
-        </select>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Timbulan (Kg)</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Yang Dimanfaatkan (Kg)</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Persentase</th>
-            </tr>
-          </thead>
-          <tbody>
-            {neraca.filter(n => n.month === selectedBulan).map((n, i) => {
-              const timb = Number(n.timbulan) || 0;
-              const diman = Number(n.dimanfaatkan) || 0;
-              const perc = timb > 0 ? (diman / timb) * 100 : 0;
-              return (
-                <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
-                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
-                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
-                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{timb.toFixed(1)}</td>
-                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{diman.toFixed(1)}</td>
-                  <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 800, color: 'var(--ds-text)' }}>{perc.toFixed(1)}%</td>
+  const renderNeraca = () => {
+    const filteredNeraca = neraca.filter(n => {
+      const matchMonth = n.month === selectedBulan;
+      const matchUnit = !userUnit || n.unit === userUnit;
+      return matchMonth && matchUnit;
+    });
+
+    return (
+      <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>
+              Neraca Sampah Bulanan - Unit {userUnit || 'Semua Unit'}
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>
+              Menampilkan data timbulan dan pemanfaatan sampah sesuai periode
+            </p>
+          </div>
+          <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
+            style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)', cursor: 'pointer' }}>
+            <option value="2026-07">Juli 2026</option>
+            <option value="2026-06">Juni 2026</option>
+          </select>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Timbulan (Kg)</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Yang Dimanfaatkan (Kg)</th>
+                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Persentase</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredNeraca.length === 0 ? (
+                <tr>
+                  <td colSpan="5" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>
+                    Tidak ada data neraca sampah untuk unit dan periode ini.
+                  </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : (
+                filteredNeraca.map((n, i) => {
+                  const timb = Number(n.timbulan) || 0;
+                  const diman = Number(n.dimanfaatkan) || 0;
+                  const perc = timb > 0 ? (diman / timb) * 100 : 0;
+                  return (
+                    <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
+                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
+                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{timb.toFixed(1)}</td>
+                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{diman.toFixed(1)}</td>
+                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 800, color: 'var(--ds-text)' }}>{perc.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderBuktiBayar = () => (
     <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Bulanan</h3>
-        <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
-          style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)' }}>
-          <option value="2026-06">Juni 2026</option>
-          <option value="2026-07">Juli 2026</option>
+        <div>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Tahunan</h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>Kelola status persetujuan kwitansi bulanan per tahun</p>
+        </div>
+        
+        <select value={selectedTahunBukti} onChange={e => setSelectedTahunBukti(e.target.value)}
+          style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
+          <option value="2026">Tahun 2026</option>
+          <option value="2025">Tahun 2025</option>
         </select>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-        {filteredBukti.length === 0 ? (
-          <p style={{ color: 'var(--ds-text-muted)', fontSize: '0.9rem', margin: 0 }}>Tidak ada bukti bayar untuk bulan ini.</p>
-        ) : filteredBukti.map(b => (
-          <div key={b.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 16, overflow: 'hidden', background: 'white', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--ds-border)', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ds-text)' }}>{b.no_bukti}</span>
-              <StatusBadge status={b.status} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+        {DAFTAR_BULAN.map(bulan => {
+          const targetKey = `${selectedTahunBukti}-${bulan.id}`;
+          const b = unitBuktiBayar.find(item => item.month === targetKey);
+
+          return (
+            <div key={bulan.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 12, padding: '14px', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.01)', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--ds-text)', display: 'block', marginBottom: 4 }}>{bulan.nama}</span>
+                {b ? <StatusBadge status={b.status} /> : <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Belum Ada Data</span>}
+              </div>
+              
+              <div style={{ marginTop: 4 }}>
+                {b && b.img_url ? (
+                  <button onClick={() => setActiveKwitansiPopup(b)} 
+                    style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#E0F2FE', color: '#0284C7', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.target.style.background = '#BAE6FD'}
+                    onMouseLeave={e => e.target.style.background = '#E0F2FE'}
+                  >
+                    <Eye size={12} /> Tinjau Kwitansi
+                  </button>
+                ) : (
+                  <button disabled style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#F1F5F9', color: '#94A3B8', border: '1px solid var(--ds-border)', padding: '8px 12px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 500, cursor: 'not-allowed' }}>
+                    Klien Belum Upload
+                  </button>
+                )}
+              </div>
             </div>
-            <div style={{ padding: 16 }}>
-              <p style={{ margin: '0 0 14px 0', fontSize: '0.85rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Unit: <strong>{b.unit}</strong></p>
-              {b.img_url ? (
-                <div style={{ width: '100%', height: 200, background: '#F1F5F9', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  <img src={b.img_url} alt="Bukti" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                </div>
-              ) : (
-                <div style={{ width: '100%', height: 200, background: '#F1F5F9', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ds-text-muted)', fontSize: '0.85rem' }}>
-                  Belum ada dokumentasi
-                </div>
-              )}
-              {(b.status === 'Pending') && onUpdateBuktiStatus && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={() => onUpdateBuktiStatus(b.id, 'Lunas')}
-                    style={{ flex: 1, padding: '8px 12px', background: '#10B981', color: 'white', border: 'none', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.2s' }}
-                    onMouseEnter={e => e.target.style.background = '#059669'}
-                    onMouseLeave={e => e.target.style.background = '#10B981'}
-                  >Setujui</button>
-                  <button onClick={() => { const reason = prompt('Alasan penolakan:'); if (reason) onUpdateBuktiStatus(b.id, 'Ditolak', reason); }}
-                    style={{ flex: 1, padding: '8px 12px', background: '#EF4444', color: 'white', border: 'none', borderRadius: 8, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.2s' }}
-                    onMouseEnter={e => e.target.style.background = '#DC2626'}
-                    onMouseLeave={e => e.target.style.background = '#EF4444'}
-                  >Tolak</button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -639,7 +781,7 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
             ))}
             {inventarisasi.filter(inv => inv.tahun === selectedTahunHistoris).length === 0 && (
               <tr>
-                <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Belum ada data inventarisasi untuk tahun ini.</td>
+                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Belum ada data inventarisasi untuk tahun ini.</td>
               </tr>
             )}
           </tbody>
@@ -723,7 +865,7 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
         />
       )}
 
-      {/* Sidebar with var(--ds-dark) and Derap Serayu highlights */}
+      {/* Sidebar Container */}
       <div className="sidebar-container" style={{
         width: 260, background: 'var(--ds-dark)', color: 'white', display: 'flex', flexDirection: 'column',
         position: 'fixed', top: 0, bottom: 0, zIndex: 50, transition: 'left 0.3s ease',
@@ -758,21 +900,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
             );
           })}
         </div>
-
-        <div style={{ padding: '20px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={() => setShowLogoutConfirm(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', width: '100%',
-              background: 'transparent', border: 'none', borderRadius: 12, color: '#FCA5A5',
-              cursor: 'pointer', textAlign: 'left', fontSize: '0.88rem', fontWeight: 600, transition: 'all 0.2s',
-              fontFamily: 'inherit'
-            }}
-            onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 0.08)'}
-            onMouseLeave={e => e.target.style.background = 'transparent'}
-          >
-            <LogOut size={18} /> Keluar
-          </button>
-        </div>
       </div>
 
       {/* Main Content */}
@@ -787,10 +914,24 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Bank Sampah Digital {userUnit ? `• Unit ${userUnit}` : ''}</p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ background: 'var(--ds-text)', color: 'white', padding: '8px 18px', borderRadius: 999, fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Administrator
             </div>
+
+            <button onClick={() => setShowLogoutConfirm(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+                background: '#FEE2E2', color: '#EF4444', border: 'none', borderRadius: '9999px',
+                cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, transition: 'all 0.2s',
+                fontFamily: 'inherit'
+              }}
+              onMouseEnter={e => e.target.style.background = '#FCA5A5'}
+              onMouseLeave={e => e.target.style.background = '#FEE2E2'}
+            >
+              <LogOut size={16} /> Keluar
+            </button>
           </div>
         </header>
 
@@ -802,8 +943,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
           {currentPage === 'inventarisasi' && renderInventarisasi()}
           {currentPage === 'rekap-program' && renderRekapProgram()}
           {currentPage === 'bukti-bayar' && renderBuktiBayar()}
-
-
 
           {currentPage === 'pengelola-data' && (
             <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
@@ -834,6 +973,43 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
         </main>
       </div>
 
+      {/* Pop-up Modal Tinjau Kwitansi Admin */}
+      {activeKwitansiPopup && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 440, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Tinjau Kwitansi Pembayaran</h3>
+              <button onClick={() => setActiveKwitansiPopup(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--ds-text-muted)', fontWeight: 'bold' }}>&times;</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>Unit Kerja: <strong style={{ color: 'var(--ds-text)' }}>{activeKwitansiPopup.unit}</strong></div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>No. Invoice: <strong style={{ fontFamily: 'monospace', color: 'var(--ds-text)' }}>{activeKwitansiPopup.no_bukti}</strong></div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>Status Saat Ini: <StatusBadge status={activeKwitansiPopup.status} /></div>
+              
+              <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--ds-border)', background: '#F8FAFC', padding: 8 }}>
+                <img src={activeKwitansiPopup.img_url} alt="Kwitansi Pembayaran" style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 320, objectFit: 'contain' }} />
+              </div>
+            </div>
+
+            {activeKwitansiPopup.status === 'Pending' && onUpdateBuktiStatus && (
+              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                <button onClick={() => { onUpdateBuktiStatus(activeKwitansiPopup.id, 'Lunas'); setActiveKwitansiPopup(null); }}
+                  style={{ flex: 1, padding: '12px', background: '#10B981', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                >Setujui Pembayaran</button>
+                <button onClick={() => { const reason = prompt('Alasan penolakan:'); if (reason) { onUpdateBuktiStatus(activeKwitansiPopup.id, 'Ditolak', reason); setActiveKwitansiPopup(null); } }}
+                  style={{ flex: 1, padding: '12px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                >Tolak</button>
+              </div>
+            )}
+            
+            <button onClick={() => setActiveKwitansiPopup(null)} style={{ width: '100%', padding: '12px', background: '#F1F5F9', color: 'var(--ds-text)', border: '1px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>
+              Kembali
+            </button>
+          </div>
+        </div>
+      )}
+
       {editingItem && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
           <div style={{ background: 'white', width: '100%', maxWidth: 500, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -862,8 +1038,8 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
       )}
 
       {showLogoutConfirm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: 380, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: 380, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ width: 64, height: 64, background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <LogOut size={32} />
@@ -882,15 +1058,12 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
               >Logout</button>
             </div>
           </div>
-          <style>{`
-            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-            @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-          `}</style>
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .sidebar-container { left: 0; }
         .main-content { margin-left: 260px; }
         .sidebar-overlay { display: none !important; }
@@ -901,7 +1074,7 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
           .sidebar-toggle { display: block !important; }
           .sidebar-overlay { display: block !important; }
         }
-      `}} />
+      `}</style>
     </div>
   );
 }
