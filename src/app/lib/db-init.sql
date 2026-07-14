@@ -3,6 +3,34 @@
 CREATE DATABASE IF NOT EXISTS bank_sampah;
 USE bank_sampah;
 
+-- 0. Master Tables & Notifications
+CREATE TABLE IF NOT EXISTS master_unit (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama_unit VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS master_pengelola (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama_pengelola VARCHAR(150) NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS master_jenis_sampah (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama_jenis VARCHAR(100) NOT NULL,
+  kategori ENUM('Organik', 'Anorganik', 'Residu') NOT NULL,
+  UNIQUE(nama_jenis, kategori)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+  title VARCHAR(100) NOT NULL,
+  message TEXT NOT NULL,
+  type ENUM('info', 'success', 'warning', 'error') DEFAULT 'info',
+  is_read BOOLEAN DEFAULT FALSE,
+  target_role VARCHAR(50) DEFAULT 'Admin SIS'
+);
+
 -- 1. users
 CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(50) PRIMARY KEY,
@@ -85,9 +113,7 @@ CREATE TABLE IF NOT EXISTS rekapitulasi_program (
   nama_program VARCHAR(150) NOT NULL,
   jenis_sampah VARCHAR(100) NOT NULL,
   jenis_kegiatan ENUM('Pemanfaatan', 'Pengurangan') NOT NULL,
-  absolut_ton DECIMAL(10,5) NOT NULL,
-  anggaran_juta DECIMAL(10,2) NOT NULL,
-  penghematan_juta DECIMAL(10,5) NOT NULL
+  absolut_ton DECIMAL(10,5) NOT NULL
 );
 
 -- 5. bukti_bayar

@@ -13,6 +13,9 @@ import {
   formatWeight, formatWeightTon, TODAY,
   KATEGORI_SAMPAH
 } from '../lib/mockData';
+import { MasterDataManagement } from './MasterDataManagement';
+import { exportToPDF, exportToExcel } from '../lib/exportUtils';
+
 
 const DAFTAR_BULAN = [
   { id: '01', nama: 'Januari' },
@@ -268,6 +271,7 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   const sidebarItems = role === 'admin sis' ? [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'pengelola-data', label: 'Manajemen Pengguna & Unit', icon: Users },
+    { id: 'master-data', label: 'Data Master', icon: Settings },
   ] : [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'waste-monitoring', label: 'Monitoring Sampah', icon: Trash2 },
@@ -281,6 +285,7 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   const pageTitles = {
     dashboard: 'Dashboard', 'waste-monitoring': 'Monitoring Sampah',
     'pengelola-data': 'Manajemen Pengguna & Unit',
+    'master-data': 'Manajemen Data Master',
     reports: 'Laporan', neraca: 'Neraca Sampah Bulanan',
     'bukti-bayar': 'Bukti Bayar',
     inventarisasi: 'Inventarisasi Sampah Historis (2021-2026)',
@@ -640,11 +645,21 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
               Menampilkan data timbulan dan pemanfaatan sampah sesuai periode
             </p>
           </div>
-          <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
-            style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)', cursor: 'pointer' }}>
-            <option value="2026-07">Juli 2026</option>
-            <option value="2026-06">Juni 2026</option>
-          </select>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button onClick={() => {
+              const dataToExport = filteredNeraca.map(n => [n.category, n.jenis, Number(n.timbulan).toFixed(1), Number(n.dimanfaatkan).toFixed(1), `${(Number(n.dimanfaatkan) / Number(n.timbulan) * 100 || 0).toFixed(1)}%`]);
+              exportToPDF('Laporan Neraca Sampah', ['Kategori', 'Jenis Sampah', 'Timbulan (Kg)', 'Dimanfaatkan (Kg)', 'Persentase'], dataToExport, { periode: selectedBulan });
+            }} style={{ background: '#EF4444', color: 'white', padding: '8px 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>PDF</button>
+            <button onClick={() => {
+              const dataToExport = filteredNeraca.map(n => ({ Kategori: n.category, 'Jenis Sampah': n.jenis, 'Timbulan (Kg)': Number(n.timbulan), 'Dimanfaatkan (Kg)': Number(n.dimanfaatkan), 'Persentase (%)': (Number(n.dimanfaatkan) / Number(n.timbulan) * 100 || 0).toFixed(1) }));
+              exportToExcel('Laporan_Neraca_Sampah', dataToExport);
+            }} style={{ background: '#10B981', color: 'white', padding: '8px 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>Excel</button>
+            <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
+              style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)', cursor: 'pointer' }}>
+              <option value="2026-07">Juli 2026</option>
+              <option value="2026-06">Juni 2026</option>
+            </select>
+          </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -818,8 +833,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kegiatan</th>
               <th style={{ padding: '14px 18px', fontWeight: 700 }}>Absolut (Ton)</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Anggaran (Juta Rp)</th>
-              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Penghematan (Juta Rp)</th>
             </tr>
           </thead>
           <tbody>
@@ -834,13 +847,11 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
                   <span style={{ padding: '4px 8px', borderRadius: '4px', background: rp.jenis_kegiatan === 'Pemanfaatan' ? '#ECFCCB' : '#DBEAFE', color: rp.jenis_kegiatan === 'Pemanfaatan' ? '#4D7C0F' : '#1D4ED8', fontWeight: 600 }}>{rp.jenis_kegiatan}</span>
                 </td>
                 <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 700 }}>{Number(rp.absolut_ton).toFixed(3)}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{Number(rp.anggaran_juta).toFixed(2)}</td>
-                <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#059669', fontWeight: 600 }}>{Number(rp.penghematan_juta).toFixed(3)}</td>
               </tr>
             ))}
             {rekapProgram.filter(rp => rp.tahun === selectedTahunHistoris).length === 0 && (
               <tr>
-                <td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Belum ada rekapitulasi program untuk tahun ini.</td>
+                <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: 'var(--ds-text-muted)' }}>Belum ada rekapitulasi program untuk tahun ini.</td>
               </tr>
             )}
           </tbody>
@@ -943,6 +954,8 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
           {currentPage === 'inventarisasi' && renderInventarisasi()}
           {currentPage === 'rekap-program' && renderRekapProgram()}
           {currentPage === 'bukti-bayar' && renderBuktiBayar()}
+          
+          {currentPage === 'master-data' && <MasterDataManagement />}
 
           {currentPage === 'pengelola-data' && (
             <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
@@ -1021,7 +1034,7 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
               {Object.keys(editFormData).filter(k => k !== 'id' && k !== 'user' && k !== 'client' && k !== 'unit' && k !== 'timestamp').map(key => (
                 <div key={key}>
                   <label style={{ display: 'block', color: 'var(--ds-text)', fontSize: '0.85rem', fontWeight: 700, marginBottom: 8, textTransform: 'capitalize', letterSpacing: '0.5px' }}>{key.replace('_', ' ')}</label>
-                  <input type={key === 'weight' || key === 'timbulan' || key === 'dimanfaatkan' || key === 'residu_tpa' || key === 'absolut_ton' || key === 'anggaran_juta' || key === 'penghematan_juta' ? 'number' : key === 'date' ? 'date' : 'text'} step="any"
+                  <input type={key === 'weight' || key === 'timbulan' || key === 'dimanfaatkan' || key === 'residu_tpa' || key === 'absolut_ton' ? 'number' : key === 'date' ? 'date' : 'text'} step="any"
                     value={editFormData[key] || ''} 
                     onChange={e => setEditFormData({ ...editFormData, [key]: e.target.value })}
                     style={{ width: '100%', padding: '12px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontFamily: 'inherit' }} 

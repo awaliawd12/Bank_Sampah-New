@@ -19,14 +19,12 @@ export async function PUT(request, { params }) {
       nama_program: body.nama_program !== undefined ? body.nama_program : current.nama_program,
       jenis_sampah: body.jenis_sampah !== undefined ? body.jenis_sampah : current.jenis_sampah,
       jenis_kegiatan: body.jenis_kegiatan !== undefined ? body.jenis_kegiatan : current.jenis_kegiatan,
-      absolut_ton: body.absolut_ton !== undefined ? body.absolut_ton : current.absolut_ton,
-      anggaran_juta: body.anggaran_juta !== undefined ? body.anggaran_juta : current.anggaran_juta,
-      penghematan_juta: body.penghematan_juta !== undefined ? body.penghematan_juta : current.penghematan_juta
+      absolut_ton: body.absolut_ton !== undefined ? body.absolut_ton : current.absolut_ton
     };
 
     await pool.query(
-      'UPDATE rekapitulasi_program SET tahun = ?, nama_program = ?, jenis_sampah = ?, jenis_kegiatan = ?, absolut_ton = ?, anggaran_juta = ?, penghematan_juta = ? WHERE id = ?',
-      [updatedData.tahun, updatedData.nama_program, updatedData.jenis_sampah, updatedData.jenis_kegiatan, updatedData.absolut_ton, updatedData.anggaran_juta, updatedData.penghematan_juta, id]
+      'UPDATE rekapitulasi_program SET tahun = ?, nama_program = ?, jenis_sampah = ?, jenis_kegiatan = ?, absolut_ton = ? WHERE id = ?',
+      [updatedData.tahun, updatedData.nama_program, updatedData.jenis_sampah, updatedData.jenis_kegiatan, updatedData.absolut_ton, id]
     );
 
     return NextResponse.json({ success: true });

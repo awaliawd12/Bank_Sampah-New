@@ -12,6 +12,8 @@
     "@google/generative-ai": "^0.24.1",
     "firebase": "^12.16.0",
     "html5-qrcode": "^2.3.8",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.23.0",
     "mysql2": "^3.22.5",
     "next": "16.2.10",

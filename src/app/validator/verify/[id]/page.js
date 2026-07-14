@@ -16,12 +16,21 @@ export default function ValidatorVerifyPage({ params }) {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [validatorName, setValidatorName] = useState('');
   const [editData, setEditData] = useState({ category: '', jenis: '', pengelola: '', weight: '' });
+  const [masterJenis, setMasterJenis] = useState([]);
+  const [masterPengelola, setMasterPengelola] = useState([]);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch(`/api/temporary-deposits/${id}`);
+        const [res, resJenis, resPengelola] = await Promise.all([
+          fetch(`/api/temporary-deposits/${id}`),
+          fetch('/api/master/jenis-sampah'),
+          fetch('/api/master/pengelola')
+        ]);
         const result = await res.json();
+        const dataJenis = await resJenis.json();
+        const dataPengelola = await resPengelola.json();
+
         if (result.success) {
           setData(result.data);
           setEditData({
@@ -30,6 +39,8 @@ export default function ValidatorVerifyPage({ params }) {
             pengelola: result.data.pengelola,
             weight: result.data.weight
           });
+          if (dataJenis.success) setMasterJenis(dataJenis.data);
+          if (dataPengelola.success) setMasterPengelola(dataPengelola.data);
         } else {
           setError(result.error || 'Data tidak ditemukan');
         }
@@ -131,21 +142,29 @@ export default function ValidatorVerifyPage({ params }) {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text-muted)', fontSize: '0.9rem', fontWeight: 600 }}><Package size={18} /> Jenis Sampah</span>
-              <input 
-                type="text"
+              <select 
                 value={editData.jenis} 
                 onChange={e => setEditData({...editData, jenis: e.target.value})} 
-                style={{ padding: '8px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 8, fontWeight: 700, outline: 'none', width: '50%', textAlign: 'right', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit' }} 
-              />
+                style={{ padding: '8px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 8, fontWeight: 700, outline: 'none', width: '50%', textAlign: 'right', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}
+              >
+                <option value="">-- Pilih Jenis --</option>
+                {masterJenis.filter(j => j.kategori === editData.category).map(j => (
+                  <option key={j.id} value={j.nama_jenis}>{j.nama_jenis}</option>
+                ))}
+              </select>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text-muted)', fontSize: '0.9rem', fontWeight: 600 }}><MapPin size={18} /> Pengelola</span>
-              <input 
-                type="text"
+              <select 
                 value={editData.pengelola} 
                 onChange={e => setEditData({...editData, pengelola: e.target.value})} 
-                style={{ padding: '8px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 8, fontWeight: 700, outline: 'none', width: '50%', textAlign: 'right', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit' }} 
-              />
+                style={{ padding: '8px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 8, fontWeight: 700, outline: 'none', width: '50%', textAlign: 'right', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}
+              >
+                <option value="">-- Pilih Pengelola --</option>
+                {masterPengelola.map(p => (
+                  <option key={p.id} value={p.nama_pengelola}>{p.nama_pengelola}</option>
+                ))}
+              </select>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ds-text-muted)', fontSize: '0.9rem', fontWeight: 600 }}><Calendar size={18} /> Tanggal Input</span>

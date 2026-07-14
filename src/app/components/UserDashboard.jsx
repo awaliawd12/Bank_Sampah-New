@@ -114,7 +114,7 @@ function StatCard({ title, value, subtext }) {
   );
 }
 
-export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDeposit, onDeleteDeposit, onAddBuktiBayar, userUnit, username }) {
+export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, masterPengelola, onLogout, onAddDeposit, onDeleteDeposit, onAddBuktiBayar, userUnit, username }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedBulan, setSelectedBulan] = useState('2026-06');
   const [selectedTahun, setSelectedTahun] = useState('2026');
@@ -131,6 +131,20 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
     date: TODAY, time: new Date().toTimeString().slice(0, 5),
     kategori: 'Organik', jenis: '', pengelola: '', berat: ''
   });
+
+  const opsiJenisLokal = useMemo(() => {
+    if (masterJenis && masterJenis.length > 0) {
+      return masterJenis.filter(j => j.kategori === formData.kategori).map(j => j.nama_jenis);
+    }
+    return OPSI_JENIS_SAMPAH[formData.kategori] || [];
+  }, [masterJenis, formData.kategori]);
+
+  const opsiPengelolaLokal = useMemo(() => {
+    if (masterPengelola && masterPengelola.length > 0) {
+      return masterPengelola.map(p => p.nama_pengelola);
+    }
+    return DAFTAR_PENGELOLA;
+  }, [masterPengelola]);
 
   const myDeposits = useMemo(() => deposits.filter(d => d.user === username), [deposits, username]);
   const unitBuktiBayar = useMemo(() => buktiBayar.filter(b => !userUnit || b.unit === userUnit), [buktiBayar, userUnit]);
@@ -344,7 +358,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             <select value={formData.jenis} onChange={e => setFormData({ ...formData, jenis: e.target.value })} required 
               style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
               <option value="">-- Pilih Jenis ({formData.kategori}) --</option>
-              {(OPSI_JENIS_SAMPAH[formData.kategori] || []).map(j => (
+              {opsiJenisLokal.map(j => (
                 <option key={j} value={j}>{j}</option>
               ))}
             </select>
@@ -355,7 +369,7 @@ export function UserDashboard({ deposits, neraca, buktiBayar, onLogout, onAddDep
             <select value={formData.pengelola} onChange={e => setFormData({ ...formData, pengelola: e.target.value })} required
               style={{ width: '100%', padding: '11px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.9rem', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
               <option value="">-- Pilih Pengelola --</option>
-              {DAFTAR_PENGELOLA.map(p => (
+              {opsiPengelolaLokal.map(p => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>

@@ -11,6 +11,8 @@ export default function UserPage() {
   const [deposits, setDeposits] = useState([]);
   const [neraca, setNeraca] = useState([]);
   const [buktiBayar, setBuktiBayar] = useState([]);
+  const [masterJenis, setMasterJenis] = useState([]);
+  const [masterPengelola, setMasterPengelola] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,17 +23,21 @@ export default function UserPage() {
 
     async function fetchData() {
       try {
-        const [resDep, resTemp, resNer, resBuk] = await Promise.all([
+        const [resDep, resTemp, resNer, resBuk, resJenis, resPengelola] = await Promise.all([
           fetch('/api/deposits?user=' + username),
           fetch('/api/temporary-deposits?user=' + username),
           fetch('/api/neraca'),
-          fetch('/api/bukti' + (unit ? `?unit=${unit}` : ''))
+          fetch('/api/bukti' + (unit ? `?unit=${unit}` : '')),
+          fetch('/api/master/jenis-sampah'),
+          fetch('/api/master/pengelola')
         ]);
 
         const dataDep = await resDep.json();
         const dataTemp = await resTemp.json();
         const dataNer = await resNer.json();
         const dataBuk = await resBuk.json();
+        const dataJenis = await resJenis.json();
+        const dataPengelola = await resPengelola.json();
 
         let allDeposits = [];
         if (dataDep.success) allDeposits = [...allDeposits, ...dataDep.deposits];
@@ -47,6 +53,8 @@ export default function UserPage() {
         setDeposits(allDeposits);
         if (dataNer.success) setNeraca(dataNer.neraca);
         if (dataBuk.success) setBuktiBayar(dataBuk.buktiBayar);
+        if (dataJenis.success) setMasterJenis(dataJenis.data);
+        if (dataPengelola.success) setMasterPengelola(dataPengelola.data);
       } catch (err) {
         console.error('Failed to fetch user dashboard data:', err);
       } finally {
@@ -131,6 +139,8 @@ export default function UserPage() {
       deposits={deposits} 
       neraca={neraca}
       buktiBayar={buktiBayar}
+      masterJenis={masterJenis}
+      masterPengelola={masterPengelola}
       onLogout={handleLogout} 
       onAddDeposit={handleAddDeposit}
       onDeleteDeposit={handleDeleteDeposit}

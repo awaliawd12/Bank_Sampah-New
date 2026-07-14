@@ -25,11 +25,12 @@ export default function AdminPage() {
 
     async function fetchData() {
       try {
+        const queryUnit = (role === 'admin sis' || !unit) ? '' : `?unit=${unit}`;
         const [resDep, resTemp, resNer, resBuk, resInv, resRekap, resUsers, resClients] = await Promise.all([
-          fetch('/api/deposits' + (unit ? `?unit=${unit}` : '')),
-          fetch('/api/temporary-deposits' + (unit ? `?unit=${unit}` : '')),
+          fetch('/api/deposits' + queryUnit),
+          fetch('/api/temporary-deposits' + queryUnit),
           fetch('/api/neraca'),
-          fetch('/api/bukti' + (unit ? `?unit=${unit}` : '')),
+          fetch('/api/bukti' + queryUnit),
           fetch('/api/inventarisasi'),
           fetch('/api/rekap-program'),
           fetch('/api/users'),
