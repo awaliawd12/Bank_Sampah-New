@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { AdminDashboard } from '../components/AdminDashboard';
@@ -16,143 +16,113 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState(null);
+
+  // Fungsi notifikasi kustom
+  const triggerNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const fetchData = useCallback(async () => {
+    try {
+      const queryUnit = (role === 'admin sis' || !unit) ? '' : `?unit=${unit}`;
+      const [resDep, resTemp, resNer, resBuk, resInv, resRekap, resUsers, resClients] = await Promise.all([
+        fetch('/api/deposits' + queryUnit),
+        fetch('/api/temporary-deposits' + queryUnit),
+        fetch('/api/neraca'),
+        fetch('/api/bukti' + queryUnit),
+        fetch('/api/inventarisasi'),
+        fetch('/api/rekap-program'),
+        fetch('/api/users'),
+        fetch('/api/clients')
+      ]);
+
+      const [dataDep, dataTemp, dataNer, dataBuk, dataInv, dataRekap, dataUsers, dataClients] = await Promise.all([
+        resDep.json(), resTemp.json(), resNer.json(), resBuk.json(), resInv.json(), resRekap.json(), resUsers.json(), resClients.json()
+      ]);
+
+      let allDeposits = [];
+      if (dataDep.success) allDeposits = [...allDeposits, ...dataDep.deposits];
+      if (dataTemp.success) allDeposits = [...allDeposits, ...dataTemp.deposits];
+      
+      allDeposits.sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
+
+      setDeposits(allDeposits);
+      if (dataNer.success) setNeraca(dataNer.neraca);
+      if (dataBuk.success) setBuktiBayar(dataBuk.buktiBayar);
+      if (dataUsers.success) setUsers(dataUsers.users);
+      if (dataClients.success) setClients(dataClients.clients);
+      if (Array.isArray(dataInv)) setInventarisasi(dataInv);
+      if (Array.isArray(dataRekap)) setRekapProgram(dataRekap);
+    } catch (err) {
+      console.error('Failed to fetch data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [role, unit]);
 
   useEffect(() => {
     if (role !== 'admin sis' && role !== 'admin llk') {
       router.push('/');
       return;
     }
-
-    async function fetchData() {
-      try {
-        const queryUnit = (role === 'admin sis' || !unit) ? '' : `?unit=${unit}`;
-        const [resDep, resTemp, resNer, resBuk, resInv, resRekap, resUsers, resClients] = await Promise.all([
-          fetch('/api/deposits' + queryUnit),
-          fetch('/api/temporary-deposits' + queryUnit),
-          fetch('/api/neraca'),
-          fetch('/api/bukti' + queryUnit),
-          fetch('/api/inventarisasi'),
-          fetch('/api/rekap-program'),
-          fetch('/api/users'),
-          fetch('/api/clients')
-        ]);
-
-        const dataDep = await resDep.json();
-        const dataTemp = await resTemp.json();
-        const dataNer = await resNer.json();
-        const dataBuk = await resBuk.json();
-        const dataInv = await resInv.json();
-        const dataRekap = await resRekap.json();
-        const dataUsers = await resUsers.json();
-        const dataClients = await resClients.json();
-
-        let allDeposits = [];
-        if (dataDep.success) allDeposits = [...allDeposits, ...dataDep.deposits];
-        if (dataTemp.success) allDeposits = [...allDeposits, ...dataTemp.deposits];
-        
-        allDeposits.sort((a, b) => {
-          const dateA = new Date(`${a.date}T${a.time}`);
-          const dateB = new Date(`${b.date}T${b.time}`);
-          return dateB - dateA;
-        });
-
-        setDeposits(allDeposits);
-        if (dataNer.success) setNeraca(dataNer.neraca);
-        if (dataBuk.success) setBuktiBayar(dataBuk.buktiBayar);
-        if (dataUsers.success) setUsers(dataUsers.users);
-        if (dataClients.success) setClients(dataClients.clients);
-        
-        if (Array.isArray(dataInv)) setInventarisasi(dataInv);
-        if (Array.isArray(dataRekap)) setRekapProgram(dataRekap);
-      } catch (err) {
-        console.error('Failed to fetch admin data from MySQL backend APIs:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchData();
-  }, [role, unit, router]);
+  }, [fetchData, role, router]);
 
-  if (role !== 'admin sis' && role !== 'admin llk') return null;
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--ds-bg)', color: 'var(--ds-text)', fontFamily: 'sans-serif' }}>
-        <h3>Loading dashboard...</h3>
-      </div>
-    );
-  }
-
-  const handleLogout = () => {
-    logout();
-    router.push('/');
-  };
-
-  const handleDeleteDeposit = async (id) => {
-    try {
-      const res = await fetch(`/api/deposits/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        setDeposits(prev => prev.filter(d => d.id !== id));
-      } else {
-        alert('Gagal menghapus data: ' + data.error);
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
-  };
-
-  const handleUpdateStatus = async (id, status, remarks = '') => {
-    try {
-      const res = await fetch(`/api/deposits/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, remarks, adminUser: 'Admin' })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setDeposits(prev => prev.map(d => d.id === id ? { ...d, status, remarks } : d));
-      } else {
-        alert('Gagal mengupdate status: ' + data.error);
-      }
-    } catch (err) {
-      console.error('Update status error:', err);
-    }
-  };
+  const handleLogout = () => { logout(); router.push('/'); };
 
   const handleUpdateBuktiStatus = async (id, status, remarks = '') => {
     try {
-      const res = await fetch(`/api/bukti/${id}`, {
+      const response = await fetch(`/api/bukti/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, remarks })
       });
-      const data = await res.json();
+
+      const data = await response.json();
       if (data.success) {
-        setBuktiBayar(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+        triggerNotification("Status berhasil diperbarui!", "success");
+        await fetchData(); 
       } else {
-        alert('Gagal mengupdate status bukti: ' + data.error);
+        triggerNotification("Gagal: " + data.error, "error");
       }
     } catch (err) {
-      console.error('Update bukti status error:', err);
+      triggerNotification("Terjadi kesalahan sistem.", "error");
     }
   };
 
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}><h3>Loading dashboard...</h3></div>;
+
   return (
-    <AdminDashboard 
-      role={role}
-      deposits={deposits} 
-      neraca={neraca}
-      buktiBayar={buktiBayar}
-      inventarisasi={inventarisasi}
-      rekapProgram={rekapProgram}
-      users={users}
-      clients={clients}
-      onLogout={handleLogout} 
-      onDeleteDeposit={handleDeleteDeposit}
-      onUpdateStatus={handleUpdateStatus}
-      onUpdateBuktiStatus={handleUpdateBuktiStatus}
-      userUnit={unit}
-    />
+    <>
+      {/* Notifikasi Kustom */}
+      {notification && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '16px 24px', borderRadius: 12,
+          background: notification.type === 'success' ? '#10B981' : '#EF4444', color: 'white', fontWeight: 700,
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)', animation: 'fadeIn 0.3s ease-out'
+        }}>
+          {notification.message}
+        </div>
+      )}
+
+      <AdminDashboard 
+        role={role}
+        deposits={deposits} 
+        neraca={neraca}
+        buktiBayar={buktiBayar}
+        inventarisasi={inventarisasi}
+        rekapProgram={rekapProgram}
+        users={users}
+        clients={clients}
+        onLogout={handleLogout} 
+        onUpdateBuktiStatus={handleUpdateBuktiStatus}
+        userUnit={unit}
+        onRefreshData={fetchData}
+      />
+      
+      <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
+    </>
   );
 }

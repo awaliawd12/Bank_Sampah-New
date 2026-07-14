@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Trash2, Users, Building2, FileText,
   BarChart2, Activity, Settings, LogOut, Menu,
   Search, Package, Scale, ChevronLeft, ChevronRight,
-  Database, FileCheck, CheckCircle, Leaf, Recycle, Eye, Upload
+  Database, FileCheck, CheckCircle, Leaf, Recycle, Eye, Upload, Download, Maximize2, X
 } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
@@ -14,7 +14,7 @@ import {
   KATEGORI_SAMPAH
 } from '../lib/mockData';
 import { MasterDataManagement } from './MasterDataManagement';
-import { exportToPDF, exportToExcel } from '../lib/exportUtils';
+import { exportToPDF, exportToExcelMultiSheet } from '../lib/exportUtils';
 
 
 const DAFTAR_BULAN = [
@@ -143,6 +143,17 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   
   const [selectedRow, setSelectedRow] = useState(null);
 
+  const [fullImage, setFullImage] = useState(null);
+  
+  const [error, setError] = useState(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [notification, setNotification] = useState(null);
+
+  const [deleteTarget, setDeleteTarget] = useState(null); // Untuk hapus
+  const [rejectTarget, setRejectTarget] = useState(null); // Untuk tolak
+  const [rejectReason, setRejectReason] = useState(''); // Untuk alasan penolakan
+
   useEffect(() => {
     setSelectedRow(null);
   }, [currentPage, tablePage, dateFilter, categoryFilter, searchQuery, selectedBulan, selectedTahunHistoris]);
@@ -215,12 +226,10 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   const anorganikWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Anorganik').reduce((s, d) => s + (Number(d.weight) || 0), 0), [unitDeposits]);
   const residuWeight = useMemo(() => unitDeposits.filter(d => d.category === 'Residu').reduce((s, d) => s + (Number(d.weight) || 0), 0), [unitDeposits]);
 
-  // PERBAIKAN: Membuat rentang 7 hari kalender asli mundur berturut-turut dari TODAY
   const dailyChartData = useMemo(() => {
     const dataGrafik = [];
     const basisTanggal = new Date(TODAY);
 
-    // Iterasi mundur 7 hari kalender berturut-turut
     for (let i = 6; i >= 0; i--) {
       const d = new Date(basisTanggal);
       d.setDate(basisTanggal.getDate() - i);
@@ -228,7 +237,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
       const stringKeyTanggal = d.toISOString().split('T')[0];
       const labelFormatIndo = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
 
-      // Ambil seluruh timbulan transaksi di tanggal tersebut
       const transaksiHariIni = unitDeposits.filter(dep => dep.date === stringKeyTanggal);
       const beratOrganik = transaksiHariIni.filter(dep => dep.category === 'Organik').reduce((s, dep) => s + (Number(dep.weight) || 0), 0);
       const beratAnorganik = transaksiHariIni.filter(dep => dep.category === 'Anorganik').reduce((s, dep) => s + (Number(dep.weight) || 0), 0);
@@ -488,11 +496,9 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   const renderLaporan = () => {
     const filteredLaporanDeposits = filterDataBerdasarkanWaktu(unitDeposits, laporanFilter);
 
-    // 1. Pengelompokan Data Per Pengelola
+    // Hitung statistik untuk dashboard
     const grouped = filteredLaporanDeposits.reduce((acc, d) => {
-      if (!acc[d.pengelola]) {
-        acc[d.pengelola] = { total: 0, count: 0, Organik: 0, Anorganik: 0, Residu: 0 };
-      }
+      if (!acc[d.pengelola]) acc[d.pengelola] = { total: 0, count: 0, Organik: 0, Anorganik: 0, Residu: 0 };
       acc[d.pengelola].total += (Number(d.weight) || 0);
       acc[d.pengelola].count += 1;
       acc[d.pengelola][d.category] += (Number(d.weight) || 0);
@@ -503,7 +509,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
     const grandTotalAnorganik = Object.values(grouped).reduce((s, d) => s + d.Anorganik, 0);
     const grandTotalResidu = Object.values(grouped).reduce((s, d) => s + d.Residu, 0);
 
-    // 2. Pembuatan Data Kronologis Untuk Grafik Tren Laporan
     const trendDataMap = new Map();
     filteredLaporanDeposits.forEach(d => {
       const entri = trendDataMap.get(d.date) || { date: d.date, Organik: 0, Anorganik: 0, Residu: 0 };
@@ -515,27 +520,203 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(item => ({
         ...item,
-        // Format label sumbu X agar lebih rapi dibaca
         labelTanggal: new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })
       }));
 
     const subtextLabel = laporanFilter === 'hari' ? 'Hari Ini' : laporanFilter === 'minggu' ? 'Minggu Ini' : laporanFilter === 'bulan' ? 'Bulan Ini' : 'Semua';
 
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {/* Panel Filter Dropdown Laporan */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', background: 'white', padding: '12px 20px', borderRadius: 12, border: '1px solid var(--ds-border)', alignItems: 'center', gap: 12 }}>
-          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ds-text-muted)' }}>Filter Waktu Laporan:</label>
-          <select value={laporanFilter} onChange={e => setLaporanFilter(e.target.value)}
-            style={{ padding: '6px 12px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.82rem', outline: 'none', background: '#F8FAFC', color: 'var(--ds-text)', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-            <option value="semua">Semua Periode</option>
-            <option value="hari">Hari Ini</option>
-            <option value="minggu">Minggu Ini</option>
-            <option value="bulan">Bulan Ini</option>
-          </select>
-        </div>
+    const handleExportExcel = async () => {
+    if (unitDeposits.length === 0) return alert('Tidak ada data.');
+    
+    const NAMA_BULAN_INDO = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const sheetsData = {};
 
-        {/* Top Stat Cards */}
+    // 1. RINGKASAN
+    const ringkasanBulanan = unitDeposits.reduce((acc, d) => {
+      const date = new Date(d.date);
+      if (isNaN(date.getTime())) return acc;
+      const bulanTahun = `${NAMA_BULAN_INDO[date.getMonth()]} ${date.getFullYear()}`;
+      if (!acc[bulanTahun]) acc[bulanTahun] = { sortKey: date.getFullYear() * 100 + date.getMonth(), Organik: 0, Anorganik: 0, Residu: 0, Unit: new Set() };
+      acc[bulanTahun][d.category] = (acc[bulanTahun][d.category] || 0) + (Number(d.weight) || 0);
+      acc[bulanTahun].Unit.add(d.pengelola);
+      return acc;
+    }, {});
+
+    sheetsData["Ringkasan"] = Object.entries(ringkasanBulanan).sort((a,b) => a[1].sortKey - b[1].sortKey).map(([bulan, data]) => ({
+      'Periode': bulan,
+      'Total Organik (Kg)': data.Organik.toFixed(1),
+      'Total Anorganik (Kg)': data.Anorganik.toFixed(1),
+      'Total Residu (Kg)': data.Residu.toFixed(1),
+      'Total Keseluruhan (Kg)': (data.Organik + data.Anorganik + data.Residu).toFixed(1),
+      'Jumlah Pengelola': data.Unit.size
+    }));
+
+    // 2. NERACA SAMPAH
+    const neracaBerdasarkanUnit = neraca.filter(n => !userUnit || n.unit === userUnit);
+    sheetsData["Neraca_Sampah"] = neracaBerdasarkanUnit.map(n => ({
+      'Bulan': n.month,
+      'Kategori': n.category,
+      'Jenis Sampah': n.jenis,
+      'Timbulan (Kg)': Number(n.timbulan).toFixed(1),
+      'Dimanfaatkan (Kg)': Number(n.dimanfaatkan).toFixed(1),
+      'Persentase Pemanfaatan': (Number(n.dimanfaatkan) / Number(n.timbulan) * 100 || 0).toFixed(1) + '%',
+      'Unit Kerja': n.unit
+    }));
+
+    // 3. KINERJA PER UNIT
+    const dataKinerja = unitDeposits.reduce((acc, d) => {
+      if (!acc[d.pengelola]) acc[d.pengelola] = { total: 0, count: 0, Organik: 0, Anorganik: 0, Residu: 0 };
+      acc[d.pengelola].total += Number(d.weight);
+      acc[d.pengelola].count += 1;
+      acc[d.pengelola][d.category] = (acc[d.pengelola][d.category] || 0) + Number(d.weight);
+      return acc;
+    }, {});
+    
+    sheetsData["Kinerja_Per_Unit"] = Object.entries(dataKinerja).map(([pengelola, data]) => ({
+      'Nama Pengelola / Unit': pengelola,
+      'Total Transaksi': data.count,
+      'Organik (Kg)': data.Organik.toFixed(1),
+      'Anorganik (Kg)': data.Anorganik.toFixed(1),
+      'Residu (Kg)': data.Residu.toFixed(1),
+      'Total Berat Keseluruhan (Kg)': data.total.toFixed(1)
+    }));
+
+    // 4. DETAIL TRANSAKSI
+    sheetsData["Detail_Transaksi"] = [...unitDeposits].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
+      'Tanggal': d.date, 
+      'Pengelola': d.pengelola, 
+      'Kategori': d.category, 
+      'Jenis': d.jenis, 
+      'Berat (Kg)': Number(d.weight).toFixed(1)
+    }));
+
+    try {
+      await exportToExcelMultiSheet(`Laporan_Bank_Sampah_Lengkap`, sheetsData);
+    } catch (error) {
+      console.error("Gagal ekspor:", error);
+      alert("Terjadi kesalahan proses Excel.");
+    }
+  };
+
+    const handleExportPDF = () => {
+  if (!startDate || !endDate) {
+    setError('Harus pilih rentang tanggal untuk download laporan pdf!');
+    return;
+  }
+
+  // Di dalam AdminDashboard.jsx
+const [localBuktiBayar, setLocalBuktiBayar] = useState(buktiBayar);
+
+// Sinkronkan jika props berubah
+useEffect(() => {
+  setLocalBuktiBayar(buktiBayar);
+}, [buktiBayar]);
+
+// Di fungsi handleUpdateBuktiStatus:
+if (data.success) {
+  // Update state lokal agar UI berubah seketika
+  setLocalBuktiBayar(prev => prev.map(item => 
+    item.id === id ? { ...item, status: status } : item
+  ));
+  alert("Status berhasil diperbarui.");
+}
+  
+  const filtered = unitDeposits.filter(d => d.date >= startDate && d.date <= endDate);
+  if (filtered.length === 0) {
+    setError('Tidak ada data pada rentang tanggal tersebut.');
+    return;
+  }
+
+  // 1. Perbaikan Logic Ringkasan
+  const ringkasan = filtered.reduce((acc, d) => {
+    acc[d.category] = (acc[d.category] || 0) + Number(d.weight);
+    return acc;
+  }, {});
+  
+  // 2. Logic Kinerja Per Unit (Dibuat lebih aman)
+  const kinerja = filtered.reduce((acc, d) => {
+    if (!acc[d.pengelola]) acc[d.pengelola] = { Organik: 0, Anorganik: 0, Residu: 0 };
+    if (acc[d.pengelola].hasOwnProperty(d.category)) {
+      acc[d.pengelola][d.category] += Number(d.weight);
+    }
+    return acc;
+  }, {});
+  
+  // Format data untuk PDF
+  const tables = [
+    {
+      title: "Ringkasan Laporan",
+      columns: ['Kategori', 'Berat (Kg)'],
+      body: Object.entries(ringkasan).map(([cat, val]) => [cat, val.toFixed(1)])
+    },
+    {
+      title: "Detail Transaksi",
+      columns: ['Tanggal', 'Pengelola', 'Kategori', 'Jenis', 'Berat'],
+      body: filtered.map(d => [d.date, d.pengelola, d.category, d.jenis, `${Number(d.weight).toFixed(1)} Kg`])
+    },
+    {
+      title: "Neraca Sampah",
+      columns: ['Bulan', 'Kategori', 'Timbulan', 'Dimanfaatkan'],
+      body: neraca.filter(n => n.month.startsWith(startDate.substring(0,7))).map(n => [n.month, n.category, n.timbulan, n.dimanfaatkan])
+    },
+    {
+      title: "Kinerja Per Unit",
+      columns: ['Pengelola', 'Organik', 'Anorganik', 'Residu'],
+      body: Object.entries(kinerja).map(([p, d]) => [p, d.Organik.toFixed(1), d.Anorganik.toFixed(1), d.Residu.toFixed(1)])
+    }
+  ];
+
+  exportToPDF('Laporan_Pengelolaan_Sampah', tables, { 
+    periode: `${startDate} s/d ${endDate}`,
+    unit: userUnit 
+  });
+  
+  setError(null); // Reset pesan error jika berhasil
+};
+
+    return (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    {/* Box Pesan Error (Agar muncul di UI) */}
+    {error && (
+      <div style={{ padding: '12px 16px', background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{error}</span>
+        <button onClick={() => setError(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 800 }}>×</button>
+      </div>
+    )}
+
+    <div style={{ display: 'flex', justifyContent: 'space-between', background: 'white', padding: '16px 20px', borderRadius: 12, border: '1px solid var(--ds-border)', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ position: 'relative' }}>
+          <button 
+            onClick={(e) => {
+              const menu = e.currentTarget.nextElementSibling;
+              menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.85rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+          >
+            <Download size={16} /> Export
+          </button>
+          <div className="export-menu" style={{ display: 'none', position: 'absolute', top: '110%', left: 0, zIndex: 10, background: 'white', border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+            <button onClick={(e) => { handleExportExcel(); e.target.parentElement.style.display = 'none'; }} style={{ display: 'block', width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer' }}>Excel</button>
+            <button onClick={(e) => { handleExportPDF(); e.target.parentElement.style.display = 'none'; }} style={{ display: 'block', width: '100%', padding: '10px 16px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer' }}>PDF</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#F8FAFC', padding: '4px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+          <input type="date" onChange={(e) => setStartDate(e.target.value)} style={{ background: 'transparent', border: 'none', padding: '4px 8px', fontSize: '0.8rem', outline: 'none' }} />
+          <span style={{ color: '#94A3B8' }}>—</span>
+          <input type="date" onChange={(e) => setEndDate(e.target.value)} style={{ background: 'transparent', border: 'none', padding: '4px 8px', fontSize: '0.8rem', outline: 'none' }} />
+        </div>
+      </div>
+
+        {/* KANAN: Filter Periode */}
+        <select value={laporanFilter} onChange={e => setLaporanFilter(e.target.value)} style={{ padding: '6px 12px', border: '1px solid #E2E8F0', borderRadius: 10, fontSize: '0.82rem', cursor: 'pointer', background: 'white' }}>
+          <option value="semua">Semua</option>
+          <option value="hari">Hari Ini</option>
+          <option value="minggu">Minggu Ini</option>
+          <option value="bulan">Bulan Ini</option>
+        </select>
+      </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
           <div style={{ background: '#D1FAE5', borderRadius: 20, padding: 24, border: '1px solid rgba(16, 185, 129, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -560,7 +741,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
           </div>
         </div>
 
-        {/* PERBAIKAN: Penambahan Grafik Tren Baru di Halaman Laporan */}
         <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Grafik Tren Volume Timbulan Sampah ({subtextLabel})</h3>
           <div style={{ height: 280 }}>
@@ -588,7 +768,6 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
           </div>
         </div>
 
-        {/* Tabel Pengelola Rincian */}
         <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', marginBottom: 20, letterSpacing: '-0.3px' }}>Rincian Per Unit / Pengelola</h3>
           <div style={{ overflowX: 'auto' }}>
@@ -628,79 +807,71 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
   };
 
   const renderNeraca = () => {
-    const filteredNeraca = neraca.filter(n => {
-      const matchMonth = n.month === selectedBulan;
-      const matchUnit = !userUnit || n.unit === userUnit;
-      return matchMonth && matchUnit;
-    });
+  const filteredNeraca = neraca.filter(n => {
+    const matchMonth = n.month === selectedBulan;
+    const matchUnit = !userUnit || n.unit === userUnit;
+    return matchMonth && matchUnit;
+  });
 
-    return (
-      <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>
-              Neraca Sampah Bulanan - Unit {userUnit || 'Semua Unit'}
-            </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>
-              Menampilkan data timbulan dan pemanfaatan sampah sesuai periode
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button onClick={() => {
-              const dataToExport = filteredNeraca.map(n => [n.category, n.jenis, Number(n.timbulan).toFixed(1), Number(n.dimanfaatkan).toFixed(1), `${(Number(n.dimanfaatkan) / Number(n.timbulan) * 100 || 0).toFixed(1)}%`]);
-              exportToPDF('Laporan Neraca Sampah', ['Kategori', 'Jenis Sampah', 'Timbulan (Kg)', 'Dimanfaatkan (Kg)', 'Persentase'], dataToExport, { periode: selectedBulan });
-            }} style={{ background: '#EF4444', color: 'white', padding: '8px 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>PDF</button>
-            <button onClick={() => {
-              const dataToExport = filteredNeraca.map(n => ({ Kategori: n.category, 'Jenis Sampah': n.jenis, 'Timbulan (Kg)': Number(n.timbulan), 'Dimanfaatkan (Kg)': Number(n.dimanfaatkan), 'Persentase (%)': (Number(n.dimanfaatkan) / Number(n.timbulan) * 100 || 0).toFixed(1) }));
-              exportToExcel('Laporan_Neraca_Sampah', dataToExport);
-            }} style={{ background: '#10B981', color: 'white', padding: '8px 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>Excel</button>
-            <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
-              style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)', cursor: 'pointer' }}>
-              <option value="2026-07">Juli 2026</option>
-              <option value="2026-06">Juni 2026</option>
-            </select>
-          </div>
+  return (
+    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>
+            Neraca Sampah Bulanan - Unit {userUnit || 'Semua Unit'}
+          </h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>
+            Menampilkan data timbulan dan pemanfaatan sampah
+          </p>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Timbulan (Kg)</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Yang Dimanfaatkan (Kg)</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>Persentase</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredNeraca.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>
-                    Tidak ada data neraca sampah untuk unit dan periode ini.
-                  </td>
-                </tr>
-              ) : (
-                filteredNeraca.map((n, i) => {
-                  const timb = Number(n.timbulan) || 0;
-                  const diman = Number(n.dimanfaatkan) || 0;
-                  const perc = timb > 0 ? (diman / timb) * 100 : 0;
-                  return (
-                    <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
-                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
-                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
-                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{timb.toFixed(1)}</td>
-                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{diman.toFixed(1)}</td>
-                      <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 800, color: 'var(--ds-text)' }}>{perc.toFixed(1)}%</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        
+        <select value={selectedBulan} onChange={e => setSelectedBulan(e.target.value)}
+          style={{ padding: '8px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', fontFamily: 'inherit', color: 'var(--ds-text)', cursor: 'pointer' }}>
+          <option value="2026-07">Juli 2026</option>
+          <option value="2026-06">Juni 2026</option>
+        </select>
       </div>
-    );
-  };
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--ds-border)', color: 'var(--ds-text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Kategori</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Jenis Sampah</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Timbulan (Kg)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Yang Dimanfaatkan (Kg)</th>
+              <th style={{ padding: '14px 18px', fontWeight: 700 }}>Persentase</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredNeraca.length === 0 ? (
+              <tr>
+                <td colSpan="5" style={{ padding: '24px 18px', textAlign: 'center', color: 'var(--ds-text-muted)', fontSize: '0.9rem' }}>
+                  Tidak ada data neraca sampah untuk unit dan periode ini.
+                </td>
+              </tr>
+            ) : (
+              filteredNeraca.map((n, i) => {
+                const timb = Number(n.timbulan) || 0;
+                const diman = Number(n.dimanfaatkan) || 0;
+                const perc = timb > 0 ? (diman / timb) * 100 : 0;
+                return (
+                  <tr key={n.id} style={{ borderBottom: '1px solid rgba(203, 213, 225, 0.4)', background: i % 2 === 0 ? 'white' : '#FAFCFD' }}>
+                    <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{n.category}</td>
+                    <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--ds-text)' }}>{n.jenis}</td>
+                    <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: 'var(--ds-text)' }}>{timb.toFixed(1)}</td>
+                    <td style={{ padding: '14px 18px', fontSize: '0.9rem', color: '#047857', fontWeight: 600 }}>{diman.toFixed(1)}</td>
+                    <td style={{ padding: '14px 18px', fontSize: '0.9rem', fontWeight: 800, color: 'var(--ds-text)' }}>{perc.toFixed(1)}%</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
 
   const renderBuktiBayar = () => (
     <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
@@ -931,6 +1102,40 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
               Administrator
             </div>
 
+            {/* Modal Tolak Bukti */}
+{rejectTarget && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)' }}>
+    <div style={{ background: 'white', width: 400, borderRadius: '1.5rem', padding: 32 }}>
+      <h3 style={{ margin: '0 0 16px' }}>Alasan Penolakan</h3>
+      <textarea 
+        autoFocus
+        style={{ width: '100%', height: 100, padding: 12, border: '1.5px solid var(--ds-border)', borderRadius: 12, marginBottom: 16 }}
+        placeholder="Tulis alasan penolakan di sini..."
+        onChange={(e) => setRejectReason(e.target.value)}
+      />
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button onClick={() => setRejectTarget(null)} style={{ flex: 1, padding: 12, borderRadius: 99, border: '1px solid #E2E8F0', background: 'white' }}>Batal</button>
+        <button onClick={() => { onUpdateBuktiStatus(rejectTarget, 'Ditolak', rejectReason); setRejectTarget(null); setRejectReason(''); }} 
+          style={{ flex: 1, padding: 12, borderRadius: 99, background: '#EF4444', color: 'white', border: 'none' }}>Kirim Penolakan</button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Modal Konfirmasi Hapus */}
+{deleteTarget && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)' }}>
+    <div style={{ background: 'white', width: 360, borderRadius: '1.5rem', padding: 32, textAlign: 'center' }}>
+      <Trash2 size={48} color="#EF4444" style={{ marginBottom: 16 }} />
+      <h3>Hapus Bukti?</h3>
+      <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: 12, borderRadius: 99, background: '#F1F5F9' }}>Batal</button>
+        <button onClick={() => { onDeleteBuktiBayar(deleteTarget); setDeleteTarget(null); }} style={{ flex: 1, padding: 12, borderRadius: 99, background: '#EF4444', color: 'white' }}>Hapus</button>
+      </div>
+    </div>
+  </div>
+)}
+
             <button onClick={() => setShowLogoutConfirm(true)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
@@ -987,41 +1192,108 @@ export function AdminDashboard({ role, deposits, neraca, buktiBayar, inventarisa
       </div>
 
       {/* Pop-up Modal Tinjau Kwitansi Admin */}
-      {activeKwitansiPopup && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: 440, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Tinjau Kwitansi Pembayaran</h3>
-              <button onClick={() => setActiveKwitansiPopup(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--ds-text-muted)', fontWeight: 'bold' }}>&times;</button>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>Unit Kerja: <strong style={{ color: 'var(--ds-text)' }}>{activeKwitansiPopup.unit}</strong></div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>No. Invoice: <strong style={{ fontFamily: 'monospace', color: 'var(--ds-text)' }}>{activeKwitansiPopup.no_bukti}</strong></div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>Status Saat Ini: <StatusBadge status={activeKwitansiPopup.status} /></div>
-              
-              <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--ds-border)', background: '#F8FAFC', padding: 8 }}>
-                <img src={activeKwitansiPopup.img_url} alt="Kwitansi Pembayaran" style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 320, objectFit: 'contain' }} />
-              </div>
-            </div>
+{activeKwitansiPopup && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)' }}>
+    <div style={{ background: 'white', width: '100%', maxWidth: 500, borderRadius: '1.5rem', padding: 32 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+        <h3 style={{ margin: 0 }}>Tinjau Kwitansi</h3>
+        <button onClick={() => setActiveKwitansiPopup(null)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>&times;</button>
+      </div>
 
-            {activeKwitansiPopup.status === 'Pending' && onUpdateBuktiStatus && (
-              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <button onClick={() => { onUpdateBuktiStatus(activeKwitansiPopup.id, 'Lunas'); setActiveKwitansiPopup(null); }}
-                  style={{ flex: 1, padding: '12px', background: '#10B981', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
-                >Setujui Pembayaran</button>
-                <button onClick={() => { const reason = prompt('Alasan penolakan:'); if (reason) { onUpdateBuktiStatus(activeKwitansiPopup.id, 'Ditolak', reason); setActiveKwitansiPopup(null); } }}
-                  style={{ flex: 1, padding: '12px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
-                >Tolak</button>
-              </div>
-            )}
-            
-            <button onClick={() => setActiveKwitansiPopup(null)} style={{ width: '100%', padding: '12px', background: '#F1F5F9', color: 'var(--ds-text)', border: '1px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>
-              Kembali
-            </button>
+      <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 15 }}>
+        <div>Unit: <strong>{activeKwitansiPopup.unit}</strong></div>
+        <div>Invoice: <strong>{activeKwitansiPopup.no_bukti}</strong></div>
+        <div>Upload: <strong>{new Date(activeKwitansiPopup.created_at).toLocaleString()}</strong></div>
+        {activeKwitansiPopup.status !== 'Pending' && (
+          <div>Verifikasi: <strong>{new Date(activeKwitansiPopup.updated_at).toLocaleString()}</strong></div>
+        )}
+        {activeKwitansiPopup.remarks && (
+          <div style={{ background: '#FEF2F2', padding: 8, borderRadius: 8, color: '#991B1B' }}>
+            Alasan Ditolak: <strong>{activeKwitansiPopup.remarks}</strong>
           </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
+  <img 
+    src={activeKwitansiPopup.img_url} 
+    alt="Kwitansi" 
+    style={{ width: '100%', maxHeight: 250, objectFit: 'contain', cursor: 'pointer' }}
+    onClick={() => setFullImage(activeKwitansiPopup.img_url)} // Klik gambar untuk zoom
+  />
+  
+  <div style={{ position: 'absolute', bottom: 10, right: 10, display: 'flex', gap: 8 }}>
+    <button 
+      onClick={() => setFullImage(activeKwitansiPopup.img_url)} 
+      style={{ padding: '8px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+    >
+      <Maximize2 size={18} />
+    </button>
+    <a href={activeKwitansiPopup.img_url} download={`Bukti_${activeKwitansiPopup.no_bukti}.png`} 
+       style={{ padding: '8px', background: '#0891B2', color: 'white', borderRadius: 8 }}>
+      <Download size={18} />
+    </a>
+  </div>
+</div>
+
+      {activeKwitansiPopup.status === 'Pending' && onUpdateBuktiStatus && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+          <button onClick={() => { onUpdateBuktiStatus(activeKwitansiPopup.id, 'Lunas'); setActiveKwitansiPopup(null); }}
+            style={{ flex: 1, padding: '12px', background: '#10B981', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+          >Setujui Pembayaran</button>
+          
+          {/* MENGGUNAKAN STATE KUSTOM BUKAN PROMPT */}
+          <button onClick={() => { setRejectTarget(activeKwitansiPopup.id); setActiveKwitansiPopup(null); }}
+            style={{ flex: 1, padding: '12px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+          >Tolak</button>
         </div>
       )}
+      
+      <button onClick={() => setActiveKwitansiPopup(null)} style={{ width: '100%', padding: '12px', background: '#F1F5F9', color: 'var(--ds-text)', border: '1px solid var(--ds-border)', borderRadius: '9999px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>
+        Kembali
+      </button>
+    </div>
+  </div>
+)}
+
+{fullImage && (
+  <div 
+    onClick={() => setFullImage(null)} // Klik di mana saja untuk menutup
+    style={{
+      position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.9)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}
+  >
+    <img src={fullImage} style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }} />
+    <button style={{ position: 'absolute', top: 20, right: 20, background: 'white', border: 'none', padding: '10px', borderRadius: '50%', cursor: 'pointer' }}>
+      <X size={24} />
+    </button>
+  </div>
+)}
+
+{/* Modal Alasan Penolakan */}
+{rejectTarget && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)' }}>
+    <div style={{ background: 'white', width: 400, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+      <h3 style={{ margin: '0 0 16px' }}>Alasan Penolakan</h3>
+      <textarea 
+        autoFocus
+        style={{ width: '100%', height: 100, padding: 12, border: '1.5px solid var(--ds-border)', borderRadius: 12, marginBottom: 16, fontFamily: 'inherit' }}
+        placeholder="Tulis alasan penolakan di sini..."
+        onChange={(e) => setRejectReason(e.target.value)}
+      />
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button onClick={() => setRejectTarget(null)} style={{ flex: 1, padding: 12, borderRadius: 99, border: '1px solid #E2E8F0', background: 'white', cursor: 'pointer' }}>Batal</button>
+        <button onClick={() => { 
+            onUpdateBuktiStatus(rejectTarget, 'Ditolak', rejectReason); 
+            setRejectTarget(null); 
+            setRejectReason(''); 
+        }} 
+          style={{ flex: 1, padding: 12, borderRadius: 99, background: '#EF4444', color: 'white', border: 'none', cursor: 'pointer' }}>Kirim Penolakan</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {editingItem && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>

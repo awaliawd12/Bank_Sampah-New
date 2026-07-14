@@ -1,35 +1,46 @@
 import { NextResponse } from 'next/server';
 import { query } from '../../../lib/db';
 
+export async function DELETE(request, { params }) {
+  try {
+    const { id } = await params;
+
+    // 1. Cek apakah bukti ada
+    const result = await query('SELECT * FROM bukti_bayar WHERE id = ?', [id]);
+    if (!result || result.length === 0) {
+      return NextResponse.json({ success: false, error: 'Bukti tidak ditemukan' }, { status: 404 });
+    }
+
+    // 2. Hapus dari database
+    await query('DELETE FROM bukti_bayar WHERE id = ?', [id]);
+
+    // 3. Pastikan return JSON yang valid
+    return NextResponse.json({ success: true, message: 'Bukti berhasil dihapus' });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
 export async function PUT(request, { params }) {
   try {
     const { id } = await params;
-    const { status, remarks } = await request.json();
+    const body = await request.json();
+    const { status } = body;
 
-    // Check if bukti exists
-    const buktis = await query('SELECT * FROM bukti_bayar WHERE id = ?', [id]);
-    if (!buktis || buktis.length === 0) {
-      return NextResponse.json({ error: 'Bukti bayar not found' }, { status: 404 });
-    }
-
-    // Update bukti status
-    await query(
+    // Lakukan update ke database
+    const result = await query(
       'UPDATE bukti_bayar SET status = ? WHERE id = ?',
       [status, id]
     );
 
-    // Insert log
-    const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const logAction = status === 'Lunas' ? 'Setujui Bukti Bayar' : 'Tolak Bukti Bayar';
-    const logDetail = `Bukti ${id} - Status: ${status}${remarks ? ` (${remarks})` : ''}`;
+    // Cek apakah ada baris yang berubah
+    if (result.affectedRows === 0) {
+      return NextResponse.json({ success: false, error: 'Data tidak ditemukan' }, { status: 404 });
+    }
 
-    await query(
-      'INSERT INTO activity_log (timestamp, user, action, detail, type) VALUES (?, ?, ?, ?, ?)',
-      [timestamp, 'Admin', logAction, logDetail, status === 'Lunas' ? 'verify' : 'reject']
-    );
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Status berhasil diperbarui' });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update bukti status', details: error.message }, { status: 500 });
+    console.error("Update Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

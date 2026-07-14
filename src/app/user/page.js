@@ -134,19 +134,40 @@ export default function UserPage() {
     }
   };
 
+  const handleDeleteBukti = async (id) => {
+  try {
+    const res = await fetch(`/api/bukti/${id}`, { method: 'DELETE' });
+    
+    // Log respons mentah untuk melihat apa yang sebenarnya dikirim server
+    const text = await res.text();
+    console.log("Response dari server:", text); 
+
+    if (!res.ok) throw new Error("Server error: " + res.status);
+    
+    const data = JSON.parse(text);
+    if (data.success) {
+      setBuktiBayar(prev => prev.filter(b => b.id !== id));
+    }
+  } catch (err) {
+    console.error("Error Detail:", err);
+    alert("Gagal menghapus: " + err.message);
+  }
+};
+
   return (
-    <UserDashboard 
-      deposits={deposits} 
-      neraca={neraca}
-      buktiBayar={buktiBayar}
-      masterJenis={masterJenis}
-      masterPengelola={masterPengelola}
-      onLogout={handleLogout} 
-      onAddDeposit={handleAddDeposit}
-      onDeleteDeposit={handleDeleteDeposit}
-      onAddBuktiBayar={handleAddBuktiBayar}
-      userUnit={unit}
-      username={username}
-    />
-  );
+  <UserDashboard 
+    deposits={deposits} 
+    neraca={neraca}
+    buktiBayar={buktiBayar}
+    masterJenis={masterJenis}
+    masterPengelola={masterPengelola}
+    onLogout={handleLogout} 
+    onAddDeposit={handleAddDeposit}
+    onDeleteDeposit={handleDeleteDeposit}
+    onAddBuktiBayar={handleAddBuktiBayar}
+    onDeleteBuktiBayar={handleDeleteBukti} // <--- TAMBAHKAN INI
+    userUnit={unit}
+    username={username}
+  />
+);
 }

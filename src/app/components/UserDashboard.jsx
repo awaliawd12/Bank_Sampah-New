@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import {
   LayoutDashboard, PlusCircle, History, Database,
   FileCheck, BarChart2, LogOut, Trash2, Calendar,
-  Clock, Package, MapPin, Scale, Info, Menu, X, Upload, Eye
+  Clock, Package, MapPin, Scale, Info, Menu, X, Upload, Eye, Maximize2, Download
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -114,7 +114,7 @@ function StatCard({ title, value, subtext }) {
   );
 }
 
-export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, masterPengelola, onLogout, onAddDeposit, onDeleteDeposit, onAddBuktiBayar, userUnit, username }) {
+export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, masterPengelola, onLogout, onAddDeposit, onDeleteDeposit, onAddBuktiBayar, onDeleteBuktiBayar, userUnit, username }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedBulan, setSelectedBulan] = useState('2026-06');
   const [selectedTahun, setSelectedTahun] = useState('2026');
@@ -123,9 +123,11 @@ export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, maste
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [generatedQr, setGeneratedQr] = useState(null);
   const [activeKwitansiPopup, setActiveKwitansiPopup] = useState(null);
+  const [fullImage, setFullImage] = useState(null);
   
   const [dashboardFilter, setDashboardFilter] = useState('hari');
   const [riwayatFilter, setRiwayatFilter] = useState('semua');
+  const [deleteTarget, setDeleteTarget] = useState(null);
   
   const [formData, setFormData] = useState({
     date: TODAY, time: new Date().toTimeString().slice(0, 5),
@@ -190,29 +192,37 @@ export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, maste
     setShowConfirmPopup(true);
   };
 
+  // Tambahkan fungsi ini
+  const handleEdit = (deposit) => {
+    setEditingId(deposit.id);
+    setFormData({
+      date: deposit.date,
+      time: deposit.time,
+      kategori: deposit.category,
+      jenis: deposit.jenis,
+      pengelola: deposit.pengelola,
+      berat: deposit.weight
+    });
+    setCurrentPage('input');
+  };
+
   const handleConfirmSave = async () => {
-    const newDep = {
-      date: formData.date,
-      time: formData.time,
-      user: username || 'User',
-      client: '-', 
-      unit: userUnit || 'Wonogiri',
-      category: formData.kategori,
-      jenis: formData.jenis,
-      pengelola: formData.pengelola,
-      weight: parseFloat(formData.berat),
-      status: 'Menunggu Validasi',
-      remarks: ''
+    const depData = {
+      date: formData.date, time: formData.time, user: username,
+      unit: userUnit, category: formData.kategori, jenis: formData.jenis,
+      pengelola: formData.pengelola, weight: parseFloat(formData.berat),
+      status: 'Menunggu Validasi'
     };
-    
-    const result = await onAddDeposit(newDep);
-    
-    setShowConfirmPopup(false);
-    
-    if (result && result.success) {
-      setGeneratedQr(result.id);
-      setFormData(prev => ({ ...prev, berat: '', jenis: '', pengelola: '' }));
+
+    if (editingId) {
+      // Jika Anda punya fungsi onUpdateDeposit dari props:
+      await onUpdateDeposit(editingId, depData); 
+      setEditingId(null);
+    } else {
+      await onAddDeposit(depData);
     }
+    setShowConfirmPopup(false);
+    setFormData({ date: TODAY, time: new Date().toTimeString().slice(0, 5), kategori: 'Organik', jenis: '', pengelola: '', berat: '' });
   };
 
   // FIX SAKLAR CAKUPAN: Dipastikan nangkring di dalam body komponen operasional utama
@@ -234,6 +244,26 @@ export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, maste
       reader.readAsDataURL(file);
     }
   };
+
+  const handleDeleteBukti = async (id) => {
+  try {
+    const res = await fetch(`/api/bukti/${id}`, { method: 'DELETE' });
+    
+    // Jangan langsung .json(), baca dulu responsnya
+    if (!res.ok) {
+       const errData = await res.json().catch(() => ({ error: 'Unknown Error' }));
+       throw new Error(errData.error || 'Gagal menghapus');
+    }
+    
+    const data = await res.json();
+    if (data.success) {
+      setBuktiBayar(prev => prev.filter(b => b.id !== id));
+    }
+  } catch (err) {
+    console.error('Delete error:', err);
+    alert(err.message);
+  }
+};
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -530,58 +560,64 @@ export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, maste
     </div>
   );
 
-  const renderBuktiBayar = () => (
-    <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Tahunan</h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>Klik tombol aksi untuk mengelola kwitansi bulanan</p>
-        </div>
-        
-        <select value={selectedTahun} onChange={e => setSelectedTahun(e.target.value)}
-          style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
-          <option value="2026">Tahun 2026</option>
-          <option value="2025">Tahun 2025</option>
-        </select>
+const renderBuktiBayar = () => (
+  <div style={{ background: 'white', borderRadius: '1.5rem', padding: 24, boxShadow: '0 10px 30px rgba(8, 145, 178, 0.03)', border: '1px solid var(--ds-border)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+      <div>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--ds-text)', margin: 0, letterSpacing: '-0.3px' }}>Bukti Bayar Tahunan</h3>
+        <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--ds-text-muted)' }}>Klik tombol aksi untuk mengelola kwitansi bulanan</p>
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
-        {DAFTAR_BULAN.map(bulan => {
-          const targetKey = `${selectedTahun}-${bulan.id}`;
-          const b = unitBuktiBayar.find(item => item.month === targetKey);
-
-          return (
-            <div key={bulan.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 12, padding: '14px', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.01)', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'space-between' }}>
-              <div>
-                <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--ds-text)', display: 'block', marginBottom: 4 }}>{bulan.nama}</span>
-                {b ? <StatusBadge status={b.status} /> : <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Belum Ada Data</span>}
-              </div>
-              
-              <div style={{ marginTop: 4 }}>
-                {b && b.img_url ? (
-                  <button onClick={() => setActiveKwitansiPopup(b)} 
-                    style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#E0F2FE', color: '#0284C7', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s' }}
-                    onMouseEnter={e => e.target.style.background = '#BAE6FD'}
-                    onMouseLeave={e => e.target.style.background = '#E0F2FE'}
-                  >
-                    <Eye size={12} /> Lihat Kwitansi
-                  </button>
-                ) : (
-                  <label style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#F1F5F9', color: 'var(--ds-text)', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s', border: '1px solid var(--ds-border)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
-                  >
-                    <Upload size={12} /> Upload
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleUploadKwitansiPerBulan(e, bulan.id)} />
-                  </label>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      
+      <select value={selectedTahun} onChange={e => setSelectedTahun(e.target.value)}
+        style={{ padding: '9px 14px', border: '1.5px solid var(--ds-border)', borderRadius: 10, fontSize: '0.88rem', outline: 'none', background: 'white', color: 'var(--ds-text)', fontFamily: 'inherit', cursor: 'pointer' }}>
+        <option value="2026">Tahun 2026</option>
+        <option value="2025">Tahun 2025</option>
+      </select>
     </div>
-  );
+
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+      {DAFTAR_BULAN.map(bulan => {
+        const targetKey = `${selectedTahun}-${bulan.id}`;
+        const b = unitBuktiBayar.find(item => item.month === targetKey);
+        const isEditable = b && b.status !== 'Lunas';
+
+        return (
+          <div key={bulan.id} style={{ border: '1px solid var(--ds-border)', borderRadius: 12, padding: '14px', background: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.01)', display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'space-between' }}>
+            <div>
+              <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--ds-text)', display: 'block', marginBottom: 4 }}>{bulan.nama}</span>
+              {b ? <StatusBadge status={b.status} /> : <span style={{ fontSize: '0.72rem', color: 'var(--ds-text-muted)', fontWeight: 500 }}>Belum Ada Data</span>}
+            </div>
+            
+            <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
+              {b && b.img_url ? (
+                <>
+                  <button onClick={() => setActiveKwitansiPopup(b)} 
+                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#E0F2FE', color: '#0284C7', border: 'none', padding: '8px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700 }}
+                  > 
+                    <Eye size={12} /> Lihat
+                  </button>
+
+                  {isEditable && (
+                    <button onClick={() => setDeleteTarget(b.id)} 
+                      style={{ background: '#FEE2E2', color: '#EF4444', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <label style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#F1F5F9', color: 'var(--ds-text)', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, border: '1px solid var(--ds-border)' }}>
+                  <Upload size={12} /> Upload
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleUploadKwitansiPerBulan(e, bulan.id)} />
+                </label>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ds-bg)', fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" }}>
@@ -681,27 +717,70 @@ export function UserDashboard({ deposits, neraca, buktiBayar, masterJenis, maste
         </main>
       </div>
 
-      {activeKwitansiPopup && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: 440, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--ds-text)', letterSpacing: '-0.5px' }}>Detail Dokumentasi Kwitansi</h3>
-              <button onClick={() => setActiveKwitansiPopup(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: 'var(--ds-text-muted)', fontWeight: 'bold' }}>&times;</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--ds-text-muted)' }}>
-                No. Bukti: <strong style={{ fontFamily: 'monospace', color: 'var(--ds-text)' }}>{activeKwitansiPopup.no_bukti}</strong>
-              </div>
-              <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--ds-border)', background: '#F8FAFC', padding: 8 }}>
-                <img src={activeKwitansiPopup.img_url} alt="Kwitansi Pembayaran" style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 350, objectFit: 'contain' }} />
-              </div>
-            </div>
-            <button onClick={() => setActiveKwitansiPopup(null)} style={{ width: '100%', padding: '12px', background: 'var(--ds-text)', color: 'white', border: 'none', borderRadius: '9999px', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Tutup Kembali
+      {/* Pop-up Detail Kwitansi User */}
+{activeKwitansiPopup && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease-out' }}>
+    <div style={{ background: 'white', width: '100%', maxWidth: 440, borderRadius: '1.5rem', padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Detail Dokumentasi Kwitansi</h3>
+        <button onClick={() => setActiveKwitansiPopup(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer' }}>&times;</button>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+        <div style={{ fontSize: '0.85rem' }}>No. Bukti: <strong>{activeKwitansiPopup.no_bukti}</strong></div>
+        
+        {/* Kontainer Gambar dengan tombol Fullscreen & Download */}
+        <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#F8FAFC' }}>
+          <img 
+            src={activeKwitansiPopup.img_url} 
+            alt="Kwitansi" 
+            style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 350, objectFit: 'contain', cursor: 'pointer' }}
+            onClick={() => setFullImage(activeKwitansiPopup.img_url)}
+          />
+          
+          <div style={{ position: 'absolute', bottom: 10, right: 10, display: 'flex', gap: 8 }}>
+            <button onClick={() => setFullImage(activeKwitansiPopup.img_url)} style={{ padding: '8px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              <Maximize2 size={18} />
             </button>
+            <a href={activeKwitansiPopup.img_url} download={`Bukti_${activeKwitansiPopup.no_bukti}.png`} style={{ padding: '8px', background: '#0891B2', color: 'white', borderRadius: 8 }}>
+              <Download size={18} />
+            </a>
           </div>
         </div>
-      )}
+      </div>
+
+      <button onClick={() => setActiveKwitansiPopup(null)} style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: 'none', borderRadius: '9999px', fontWeight: 700, cursor: 'pointer' }}>
+        Tutup Kembali
+      </button>
+    </div>
+  </div>
+)}
+
+{/* Lightbox Fullscreen */}
+{fullImage && (
+  <div onClick={() => setFullImage(null)} style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <img src={fullImage} style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }} />
+    <button onClick={() => setFullImage(null)} style={{ position: 'absolute', top: 20, right: 20, background: 'white', border: 'none', padding: 10, borderRadius: '50%', cursor: 'pointer' }}>
+      <X size={24} />
+    </button>
+  </div>
+)}
+
+      {deleteTarget && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s' }}>
+    <div style={{ background: 'white', width: '100%', maxWidth: 360, borderRadius: '1.5rem', padding: 32, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+      <div style={{ width: 64, height: 64, background: '#FEE2E2', color: '#EF4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+        <Trash2 size={32} />
+      </div>
+      <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', color: 'var(--ds-text)' }}>Hapus Bukti Pembayaran?</h3>
+      <p style={{ color: 'var(--ds-text-muted)', marginBottom: 24, fontSize: '0.9rem' }}>Data ini akan dihapus permanen dari sistem.</p>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '12px', background: '#F1F5F9', border: 'none', borderRadius: 99, fontWeight: 700, cursor: 'pointer' }}>Batal</button>
+        <button onClick={() => { onDeleteBuktiBayar(deleteTarget); setDeleteTarget(null); }} style={{ flex: 1, padding: '12px', background: '#EF4444', color: 'white', border: 'none', borderRadius: 99, fontWeight: 700, cursor: 'pointer' }}>Hapus</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {showLogoutConfirm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12, 26, 46, 0.6)', backdropFilter: 'blur(4px)', animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
